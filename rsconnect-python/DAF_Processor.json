@@ -1,0 +1,12 @@
+{
+    "https://api.shinyapps.io": {
+        "server_url": "https://api.shinyapps.io",
+        "filename": "C:\\Users\\reach\\Desktop\\Git\\DAF_Processor",
+        "app_url": "https://impact-initiatives.shinyapps.io/daf_processor/",
+        "app_id": 12363579,
+        "app_guid": null,
+        "title": "DAF_Processor",
+        "app_mode": "python-shiny",
+        "app_store_version": 1
+    }
+}
