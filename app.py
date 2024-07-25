@@ -21,31 +21,70 @@ app_ui = ui.page_fluid(
     ),
     ui.HTML('<br>'),
     ui.navset_tab(
-        ui.nav_panel(
-            'Upload your files',
-            ui.input_file("file_daf", "Choose a DAF to upload:", accept=[".xlsx"]),
-            ui.input_file("file_tool", "Upload your kobo tool", accept=[".xlsx"]),
-            ui.input_file("file_data", "Upload your dataframe", accept=[".xlsx"]),
-            ui.input_checkbox('checkbox','Does your data have weights?'),
-            ui.panel_conditional(
-                'input.checkbox',
-                ui.input_selectize('weight_column', 
-                                'Select the weight column from your dataframe',
-                                choices = [],
-                                multiple=False
-                                )
-                ),
-            ui.input_action_button('process','Process your request'),
-            ui.HTML('<br>'),
-            ui.HTML('<br>'),
-            'Download your data once processed',
-            ui.HTML('<br>'),
-            ui.HTML('<br>'),
-            ui.download_button("download_data", "Download test")
+        ui.nav_panel('Read Me',
+                     ui.HTML(
+                         '<h3><b>App usage</b></h3><br><h4>This app is meant to automate the creation of the analysis frequency tables. It requires the user to provide the dataframe, the Kobo tool and the filled-out DAF file.'\
+                +' While slower than the script run on the local machine, this app allows independent data exploration. It has all of the regular capabilities of tabular analysis V4 including filters, joins and calculations</h4>'\
+                        +'<h3><b>DAF requirements</b></h3>'\
+                            +'<h4>The app requires the regular kobo tool and the dataframe with all of the relevant variables.'\
+                                +' The app does not transform the dataframe in any way so if the user wants to produce a table with a non-existing variable, the app will produce an error. '\
+                                    + 'The app requires  the V4 version of the DAP tool that has two sheets - main and filter. The main sheet should have the following columns</h4>'
+                     ),
+                     ui.output_data_frame("output_table1")
+        ),
+        ui.nav_panel('The processor',
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        'Upload your files',
+                        ui.input_file("file_daf", "Choose a DAF to upload:", accept=[".xlsx"]),
+                        ui.input_file("file_tool", "Upload your kobo tool", accept=[".xlsx"]),
+                        ui.input_file("file_data", "Upload your dataframe", accept=[".xlsx"]),
+                        ui.input_checkbox('checkbox','Does your data have weights?'),
+                        ui.panel_conditional(
+                            'input.checkbox',
+                            ui.input_selectize('weight_column', 
+                                            'Select the weight column from your dataframe',
+                                            choices = [],
+                                            multiple=False
+                                            )
+                            ),
+                        ui.input_action_button('process','Process your request'),
+                        ui.HTML('<br>'),
+                        ui.HTML('<br>'),
+                        'Download your data once processed',
+                        ui.HTML('<br>'),
+                        ui.HTML('<br>'),
+                        ui.download_button("download_data", "Download test"),
+                        width = 1000,
+                        open = 'always'
+                        )
+                    )
+                )
         )
-    ))
+    )
 
 def server(input:Inputs, output: Outputs, session:Session):
+    
+    @render.data_frame
+    def output_table1():
+        data = {
+            'ID': ['Row index'],
+            'variable': ['The name of the variable'],
+            'variable_label': ['The label of your variable, what did you ask the respondent?'],
+            'calculation': ['Supports two functions include_na and add_total.'],
+            'func': ['Whether the variable should be disaggregated as a frequency or as a weighted mean	'],
+            'admin': ['The admin unit to be used for the disaggregation'],
+            'disaggregations': ['What is the disaggregation variable you want to use for your variable?'],
+            'disaggregations_label': ['A nice label of your disaggregation column'],
+            'join': ['The ID of the parent row of the dependent table']
+            }
+        df = pd.DataFrame(data)
+        return render.DataTable(df,
+                                width="100%",
+                                height="550",
+                                filters=False
+                                )
+
 
     # set up the reactives
     data_file = reactive.value(None)
