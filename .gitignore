@@ -1,0 +1,7 @@
+# Ignore everything in this directory
+*
+.xlsx
+.zip
+# Except for these files:
+!.gitignore
+!readme.txt
