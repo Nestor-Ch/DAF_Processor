@@ -147,23 +147,22 @@ def get_variable_type(data, variable_name):
 
 
 def check_daf_filter(daf, data, filter_daf, tool_survey, tool_choices):
-    error_summary = ''
     merged_daf = filter_daf.merge(daf, on='ID', how='inner')
     # some calculate variables can be NaN
     merged_daf = merged_daf.drop(
         ['calculation', 'join', 'disaggregations'], axis=1)
     # check if rows contain NaN
     if filter_daf.isnull().values.any():
-        error_summary = error_summary+ ("Some rows in the filter sheet contain NaN")
+        raise ValueError("Some rows in the filter sheet contain NaN")
 
     # check IDs consistency
     if len(merged_daf) != len(filter_daf):
-        error_summary = error_summary+ ("Some IDs in file are not in DAF")
+        raise ValueError("Some IDs in file are not in DAF")
 
     for row_id, row in merged_daf.iterrows():
         # check that filter variable are in the same sheet in the data
         if row['variable_x'] not in data[row['datasheet']].columns:
-            error_summary = error_summary+ (f"Filter variable {row['variable_x']} not found in {row['datasheet']}")
+            raise ValueError(f"Filter variable {row['variable_x']} not found in {row['datasheet']}")
 
         value_type = type(row['value'])
 
@@ -171,46 +170,44 @@ def check_daf_filter(daf, data, filter_daf, tool_survey, tool_choices):
         if row["value"] in tool_survey['name'].tolist():
             # check that the variable is in the same sheet in the data
             if row['value'] not in data[row['datasheet']].columns:
-                error_summary = error_summary+ (f"Filter value {row['value']} not found in {row['datasheet']}")
+                raise ValueError(f"Filter value {row['value']} not found in {row['datasheet']}")
 
             # check that the variable and the value have the same type
             if get_variable_type(data[row['datasheet']], row['variable_x']) != get_variable_type(data[row['datasheet']], row['value']):
-                error_summary = error_summary+ (f"Variable {row['variable_x']} and {row['value']} have different types")
+                raise ValueError(f"Variable {row['variable_x']} and {row['value']} have different types")
 
             # check that the operation is allowed for the type
             if get_variable_type(data[row['datasheet']], row['value']) == 'string':
                 if row['operation'] not in ["!=", "=="]:
-                    error_summary = error_summary+ (
+                    raise ValueError(
                         f"Operation {row['operation']} not allowed for string variables")
             continue
 
         if value_type == str:
             # check that the variable and the value have the same type
             if get_variable_type(data[row['datasheet']], row['variable_x']) != 'string':
-                error_summary = error_summary+ (
+                raise ValueError(
                     f"Variable {row['variable_x']} has another type then filter value")
             # check that the operation is allowed for the type
             if row["operation"].strip(' ') not in ["!=", "=="]:
-                error_summary = error_summary+ (
+                raise ValueError(
                     f"Operation {row['operation']} not allowed for string variables")
         else:
             # check that the variable and the value have the same type
             if get_variable_type(data[row['datasheet']], row['variable_x']) == 'string':
-                error_summary = error_summary+ (
+                raise ValueError(
                     f"Variable {row['variable_x']} has another type then filter value")
             # check that the operation is allowed for the type
             if row["operation"].strip(' ') not in ["<", ">", "<=", ">=", "!=", "=="]:
-                error_summary = error_summary+ (
+                raise ValueError(
                     f"Operation {row['operation']} not allowed for numeric variables")
-    return error_summary
 
 
 def check_daf_consistency(daf, data, sheets, resolve=False):
-    error_sum =''
     # check that all variables have a datasheet
     if daf['datasheet'].isnull().values.any():
         if not resolve:
-            error_sum = error_sum + " " +('the following are missing ' +
+            raise ValueError('the following are missing ' +
                              ','.join(daf[daf['datasheet'].isnull().values]['variable']))
         else:
             print('the following are missing ' +
@@ -221,7 +218,7 @@ def check_daf_consistency(daf, data, sheets, resolve=False):
     for id, row in daf.iterrows():
         if row["variable"] not in data[row["datasheet"]].columns:
             if not resolve:
-                error_sum = error_sum +" " + (f"Column {row['variable']} not found in {row['datasheet']}")
+                raise ValueError(f"Column {row['variable']} not found in {row['datasheet']}")
             else:
                 print(f"Column {row['variable']} not found in {row['datasheet']}")
                 daf.drop(id, inplace=True)
@@ -234,7 +231,7 @@ def check_daf_consistency(daf, data, sheets, resolve=False):
                 if disaggregations_item not in data[row["datasheet"]].columns:
                     error_message = f"Disaggregation {disaggregations_item} not found in {row['datasheet']} for variable {row['variable']}"
                     if not resolve:
-                        error_sum = error_sum +' ' + error_message
+                        raise ValueError(error_message)
                     else:
                         print(error_message)
                         daf.drop(id, inplace=True)
@@ -242,7 +239,7 @@ def check_daf_consistency(daf, data, sheets, resolve=False):
 
         if row["admin"] not in data[row["datasheet"]].columns:
             if not resolve:
-                error_sum = error_sum + (f"admin {row['admin']} not found in {row['datasheet']} for variable {row['variable']}")
+                raise ValueError(f"admin {row['admin']} not found in {row['datasheet']} for variable {row['variable']}")
             else:
                 print(f"admin {row['admin']} not found in {row['datasheet']} for variable {row['variable']}")
                 daf.drop(id, inplace=True)
@@ -272,7 +269,7 @@ def check_daf_consistency(daf, data, sheets, resolve=False):
             print(f"WARNING: Sheet {sheet} has no variables in DAF")
         print(f"Sheet {sheet} has {len(sheet_dict[sheet])} variables")
 
-    return daf, error_sum
+    return daf
 
 
 def custom_sort_key(value):

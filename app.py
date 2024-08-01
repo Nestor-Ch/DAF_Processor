@@ -334,270 +334,235 @@ def server(input:Inputs, output: Outputs, session:Session):
                         footer=False
                     )
                     ui.modal_show(modal_1)
-                else:    
-                    daf_merged, error_msg = check_daf_consistency(daf_merged, data, sheets, resolve=False)
+                else:
+                    try:    
+                        daf_merged = check_daf_consistency(daf_merged, data, sheets, resolve=False)
                     
-                    if error_msg !='':
-                        modal_1 = ui.modal(
-                            error_msg,
-                            title='Error',
-                            easy_close=True,
-                            footer=False
-                            )
-                        ui.modal_show(modal_1)
-                    else:
                         daf_numeric = daf_merged[daf_merged['func'].isin(['numeric', 'mean'])]
                         if daf_numeric.shape[0]>0:
                             for i, daf_row in daf_numeric.iterrows():
                                 res  = is_numeric_dtype(data[daf_row['datasheet']][daf_row['variable']])
                                 if res == False:
-                                    error_msg = error_msg + (f"Variable {daf_row['variable']} from datasheet {daf_row['datasheet']} is not numeric, but you want to apply a mean function to it in your DAF")
-
-                        
+                                    raise ValueError(f"Variable {daf_row['variable']} from datasheet {daf_row['datasheet']} is not numeric, but you want to apply a mean function to it in your DAF")
                         #Checking your filter page and building the filter dictionary
                         
                         if filter_daf.shape[0]>0:
-                            error_msg_filt = check_daf_filter(daf =daf_merged, data = data,filter_daf=filter_daf, tool_survey=tool_survey, tool_choices=tool_choices)
-                            if error_msg_filt !='':
-                                modal_1 = ui.modal(
-                                    error_msg_filt,
-                                    title='Error',
-                                    easy_close=True,
-                                    footer=False
-                                    )
-                                ui.modal_show(modal_1)
-                            else:
-                                # Create filter dictionary object 
-                                filter_daf_full = filter_daf.merge(daf_merged[['ID','datasheet']], on = 'ID',how = 'left')
+                            check_daf_filter(daf =daf_merged, data = data,filter_daf=filter_daf, tool_survey=tool_survey, tool_choices=tool_choices)
+                            # Create filter dictionary object 
+                            filter_daf_full = filter_daf.merge(daf_merged[['ID','datasheet']], on = 'ID',how = 'left')
 
-                                filter_dict = {}
-                                # Iterate over DataFrame rows
-                                for index, row in filter_daf_full.iterrows():
-                                    # If the value is another variable, don't use the string bit for it
-                                    if isinstance(row['value'], str) and row['value'] in data[row['datasheet']].columns:
-                                        condition_str = f"(data['{row['datasheet']}']['{row['variable']}'] {row['operation']} data['{row['datasheet']}']['{row['value']}'])"
-                                    # If the value is a string and is equal
-                                    elif isinstance(row['value'], str) and row['operation']=='==':
-                                        condition_str = f"(data['{row['datasheet']}']['{row['variable']}'].astype(str).str.contains('{row['value']}', regex=True))"
-                                    # If the value is a string and is not equal
-                                    elif isinstance(row['value'], str) and row['operation']=='!=':
-                                        condition_str = f"(~data['{row['datasheet']}']['{row['variable']}'].astype(str).str.contains('{row['value']}', regex=True))"
-                                    # Otherwise just keep as is
-                                    else:
-                                        condition_str = f"(data['{row['datasheet']}']['{row['variable']}'] {row['operation']} {row['value']})"
-                                    if row['ID'] in filter_dict:
-                                        filter_dict[row['ID']].append(condition_str)
-                                    else:
-                                        filter_dict[row['ID']] = [condition_str]
+                            filter_dict = {}
+                            # Iterate over DataFrame rows
+                            for index, row in filter_daf_full.iterrows():
+                                # If the value is another variable, don't use the string bit for it
+                                if isinstance(row['value'], str) and row['value'] in data[row['datasheet']].columns:
+                                    condition_str = f"(data['{row['datasheet']}']['{row['variable']}'] {row['operation']} data['{row['datasheet']}']['{row['value']}'])"
+                                # If the value is a string and is equal
+                                elif isinstance(row['value'], str) and row['operation']=='==':
+                                    condition_str = f"(data['{row['datasheet']}']['{row['variable']}'].astype(str).str.contains('{row['value']}', regex=True))"
+                                # If the value is a string and is not equal
+                                elif isinstance(row['value'], str) and row['operation']=='!=':
+                                    condition_str = f"(~data['{row['datasheet']}']['{row['variable']}'].astype(str).str.contains('{row['value']}', regex=True))"
+                                # Otherwise just keep as is
+                                else:
+                                    condition_str = f"(data['{row['datasheet']}']['{row['variable']}'] {row['operation']} {row['value']})"
+                                if row['ID'] in filter_dict:
+                                    filter_dict[row['ID']].append(condition_str)
+                                else:
+                                    filter_dict[row['ID']] = [condition_str]
 
-                                # Join the similar conditions with '&'
-                                for key, value in filter_dict.items():
-                                    filter_dict[key] = ' & '.join(value)
-                                filter_dict = {key: f'{value}]' for key, value in filter_dict.items()}
+                            # Join the similar conditions with '&'
+                            for key, value in filter_dict.items():
+                                filter_dict[key] = ' & '.join(value)
+                            filter_dict = {key: f'{value}]' for key, value in filter_dict.items()}
                         else:
                             filter_dict = {}
-                            error_msg_filt = ''
                         
                         
                         if weighting_column != None:
                             for sheet_name in sheets:
                                 if data[sheet_name][weighting_column].isnull().sum().any():
-                                    error_msg = error_msg+ f"The weight column in sheet {sheet_name} contains NAs please fix this"
+                                    raise ValueError(f"The weight column in sheet {sheet_name} contains NAs please fix this")
                         
                         daf_final = daf_merged.merge(tool_survey[['name','q.type']], left_on = 'variable',right_on = 'name', how='left')
-                        daf_final['q.type']=daf_final['q.type'].fillna('select_one')
+                        daf_final['q.type']=daf_final['q.type'].fillna('select_one') 
                         
-                        # browse all of the errors here
-                        error_message_full = error_message.get()
-                        if error_message_full != None:
-                            error_message_full = error_message_full+error_msg+error_msg_filt
-                        else:
-                            error_message_full = error_msg+error_msg_filt
                             
-                        if error_message_full =='':
-                            error_message_full = None
+                        # analyse the data here
+                        disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= True, weight_column =weighting_column)
                         
-                        if error_message_full != None:
-                            modal_error_fin = ui.modal(error_message_full,
+                        disaggregations_orig = deepcopy(disaggregations_full) # analysis key table
+
+                        for element in disaggregations_full:
+                            if isinstance(element[0], pd.DataFrame):  
+                                if all(column in element[0].columns for column in element[0].columns if column.endswith('orig')):
+                                    element[0].drop(columns=[col for col in  element[0].columns if col.endswith('orig')], inplace=True)
+
+                        disaggregations_perc = deepcopy(disaggregations_full) # percentage table
+                        disaggregations_count = deepcopy(disaggregations_full) # count table
+                        disaggregations_count_w = deepcopy(disaggregations_full) # weighted count table
+
+                        # remove counts prom perc table
+                        for element in disaggregations_perc:
+                            if isinstance(element[0], pd.DataFrame):  
+                                if all(column in element[0].columns for column in ['category_count','weighted_count']):
+                                    element[0].drop(columns=['category_count','weighted_count','unweighted_count'], inplace=True)
+
+                        # remove perc columns from weighted count table
+                        for element in disaggregations_count_w:
+                            if isinstance(element[0], pd.DataFrame):  
+                                if all(column in element[0].columns for column in ['perc']):
+                                    element[0].drop(columns=['perc','unweighted_count'], inplace=True)
+                                element[0].rename(columns={'weighted_count': 'category_count'}, inplace=True)
+                
+                        # remove perc columns from unweighted count table
+                        for element in disaggregations_count:
+                            if isinstance(element[0], pd.DataFrame):  
+                                if all(column in element[0].columns for column in ['perc']):
+                                    element[0].drop(columns=['perc','weighted_count'], inplace=True)
+                                element[0].rename(columns={'unweighted_count': 'category_count'}, inplace=True)
+
+
+                        # Get the columns for Analysis key table 
+                        concatenated_df_orig = pd.concat([tpl[0] for tpl in disaggregations_orig], ignore_index = True)
+                        if 'disaggregations_category_1' in concatenated_df_orig.columns:
+                            concatenated_df_orig = concatenated_df_orig[(concatenated_df_orig['admin'] != 'Total') & (concatenated_df_orig['disaggregations_category_1'] != 'Total')]
+                        else:
+                            concatenated_df_orig = concatenated_df_orig[(concatenated_df_orig['admin'] != 'Total')]
+    
+                        disagg_columns_og = [col for col in concatenated_df_orig.columns if col.startswith('disaggregations') and not col.endswith('orig')]
+                        ls_orig = ['admin','admin_category','option', 'variable']+disagg_columns_og
+
+                        for column in ls_orig:
+                            if column in concatenated_df_orig.columns:
+                                if column+'_orig' not in concatenated_df_orig.columns:
+                                    concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column]
+                                concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column+'_orig'].fillna(concatenated_df_orig[column])
+
+
+                        concatenated_df_orig = concatenated_df_orig.merge(daf_final[['ID','q.type']], on='ID', how='left')
+
+                        concatenated_df_orig['key'] = concatenated_df_orig.apply(key_creator, axis=1)
+
+                        if 'mean' in concatenated_df_orig.columns:
+                            if 'perc' in concatenated_df_orig.columns:
+                                concatenated_df_orig['perc'] = concatenated_df_orig['perc'].fillna(concatenated_df_orig['mean'])
+                            else:
+                                concatenated_df_orig['perc'] = concatenated_df_orig['mean']
+
+                        concatenated_df_orig=concatenated_df_orig[['key','perc']]
+
+                        # prepare dashboard inputs 
+                        concatenated_df = pd.concat([tpl[0] for tpl in disaggregations_perc], ignore_index = True)
+                        if 'disaggregations_category_1' in concatenated_df.columns:
+                            concatenated_df = concatenated_df[(concatenated_df['admin'] != 'Total') & (concatenated_df['disaggregations_category_1'] != 'Total')]
+                        else:
+                            concatenated_df = concatenated_df[(concatenated_df['admin'] != 'Total')]
+
+
+                        disagg_columns = [col for col in concatenated_df.columns if col.startswith('disaggregations')]
+                        concatenated_df.loc[:,disagg_columns] = concatenated_df[disagg_columns].fillna(' Overall')
+
+                        # Join tables if needed
+                        print('Joining tables if such was specified')
+                        disaggregations_perc_new = disaggregations_perc.copy()
+                        # check if any joining is needed
+                        if pd.notna(daf_final['join']).any():
+
+                            # get other children here
+                            child_rows = daf_final[pd.notna(daf_final['join'])]
+
+                            if any(child_rows['ID'].isin(child_rows['join'])):
+                                raise ValueError('Some of the join tables are related to eachother outside of their relationship with the parent row. Please fix this')
+                            else:
+                                for index, child_row in child_rows.iterrows():
+                                    child_index = child_row['ID']
+            
+                                if child_index not in daf_final['ID']:
+                                    raise ValueError(f'The specified parent index in join column for child row ID = {child_index} doesnt exist in the DAF file')
+                                else:
+            
+                                    parent_row = daf_final[daf_final['ID'].isin(child_row[['join']])]
+                                    parent_index = parent_row.iloc[0]['ID']
+
+
+                                    # check that the rows are idential
+                                    parent_check = parent_row[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
+                                    child_check = child_row.to_frame().transpose()[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
+
+                                    check_result = child_check.equals(parent_check)
+
+                                    if not check_result:
+                                        raise ValueError('Joined rows are not identical in terms of admin, calculations, function and disaggregations')
+                                    else:
+                                        # get the data and dataframe indeces of parents and children
+                                        child_tupple = [(i,tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == child_index]
+                                        parent_tupple = [(i, tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == parent_index]
+
+                                        child_tupple_data = child_tupple[0][1][0].copy()
+                                        child_tupple_index = child_tupple[0][0]
+                                        parent_tupple_data = parent_tupple[0][1][0].copy()
+                                        parent_tupple_index = parent_tupple[0][0]
+                                        # rename the data so that they are readable
+                                        varnames = [parent_tupple_data['variable'][0],child_tupple_data['variable'][0]]
+                                        dataframes =[parent_tupple_data, child_tupple_data]
+
+                                        for var, dataframe in  zip(varnames, dataframes):
+                                            rename_dict = {'mean': 'mean_'+var,'median': 'median_'+var ,'count': 'count_'+var, 
+                                                            'perc': 'perc_'+var,'min': 'min_'+var, 'max': 'max_'+var}
+
+                                            for old_name, new_name in rename_dict.items():
+                                                if old_name in dataframe.columns:
+                                                    dataframe.rename(columns={old_name: new_name},inplace=True)
+
+
+                                        # get the lists of columns to keep and merge
+                                        columns_to_merge = [item for item in parent_tupple_data.columns if 'disaggregations' in item  or 'admin' in item]+['option']
+                                        columns_to_keep = columns_to_merge+ list(rename_dict.values())
+
+                                        parent_tupple_data= parent_tupple_data.merge(
+                                        child_tupple_data[child_tupple_data.columns.intersection(columns_to_keep)], 
+                                        on = columns_to_merge,how='left')
+
+
+                                        parent_index_f = parent_tupple[0][1][1]
+                                        parent_label_f = str(child_tupple[0][1][2]).split()[0]+' & '+ str(parent_tupple[0][1][2])
+                                        
+                                        if str(child_tupple[0][1][3]) != '':
+                                            parent_sig_f = str(child_tupple[0][1][3])+' & '+ str(parent_tupple[0][1][3])
+                                        else:
+                                            parent_sig_f = ''
+
+                                        new_list = (parent_tupple_data,parent_index_f,parent_label_f,parent_sig_f)
+                                        disaggregations_perc_new[parent_tupple_index] = new_list
+                                        del disaggregations_perc_new[child_tupple_index]
+
+                            
+                            
+                        perc_tbl.set(disaggregations_perc_new)
+                        count_w_tbl.set(disaggregations_count_w)
+                        count_tbl.set(disaggregations_count)
+                        conc_tbl.set(concatenated_df)
+                        conc_key_tbl.set(concatenated_df_orig)
+                        # remove all modal windows
+                        ui.notification_show("Finished processing", duration=5, type="message")
+                        print("--- %s seconds ---" % (time.time() - start_time))
+                            
+                    except Exception as e:
+                        modal_error_fin = ui.modal(str(e),
                                 title = 'Error',
                                 easy_close=True,
                                 footer=None)
                         
-                            ui.modal_remove()
-                            ui.modal_show(modal_error_fin)
-                        else:
-                            
-                            # analyse the data here
-                            disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= True, weight_column =weighting_column)
-                            
-                            disaggregations_orig = deepcopy(disaggregations_full) # analysis key table
-
-                            for element in disaggregations_full:
-                                if isinstance(element[0], pd.DataFrame):  
-                                    if all(column in element[0].columns for column in element[0].columns if column.endswith('orig')):
-                                        element[0].drop(columns=[col for col in  element[0].columns if col.endswith('orig')], inplace=True)
-
-                            disaggregations_perc = deepcopy(disaggregations_full) # percentage table
-                            disaggregations_count = deepcopy(disaggregations_full) # count table
-                            disaggregations_count_w = deepcopy(disaggregations_full) # weighted count table
-
-                            # remove counts prom perc table
-                            for element in disaggregations_perc:
-                                if isinstance(element[0], pd.DataFrame):  
-                                    if all(column in element[0].columns for column in ['category_count','weighted_count']):
-                                        element[0].drop(columns=['category_count','weighted_count','unweighted_count'], inplace=True)
-
-                            # remove perc columns from weighted count table
-                            for element in disaggregations_count_w:
-                                if isinstance(element[0], pd.DataFrame):  
-                                    if all(column in element[0].columns for column in ['perc']):
-                                        element[0].drop(columns=['perc','unweighted_count'], inplace=True)
-                                    element[0].rename(columns={'weighted_count': 'category_count'}, inplace=True)
-                
-                            # remove perc columns from unweighted count table
-                            for element in disaggregations_count:
-                                if isinstance(element[0], pd.DataFrame):  
-                                    if all(column in element[0].columns for column in ['perc']):
-                                        element[0].drop(columns=['perc','weighted_count'], inplace=True)
-                                    element[0].rename(columns={'unweighted_count': 'category_count'}, inplace=True)
-
-
-                            # Get the columns for Analysis key table 
-                            concatenated_df_orig = pd.concat([tpl[0] for tpl in disaggregations_orig], ignore_index = True)
-                            if 'disaggregations_category_1' in concatenated_df_orig.columns:
-                                concatenated_df_orig = concatenated_df_orig[(concatenated_df_orig['admin'] != 'Total') & (concatenated_df_orig['disaggregations_category_1'] != 'Total')]
-                            else:
-                                concatenated_df_orig = concatenated_df_orig[(concatenated_df_orig['admin'] != 'Total')]
-        
-                            disagg_columns_og = [col for col in concatenated_df_orig.columns if col.startswith('disaggregations') and not col.endswith('orig')]
-                            ls_orig = ['admin','admin_category','option', 'variable']+disagg_columns_og
-
-                            for column in ls_orig:
-                                if column in concatenated_df_orig.columns:
-                                    if column+'_orig' not in concatenated_df_orig.columns:
-                                        concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column]
-                                    concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column+'_orig'].fillna(concatenated_df_orig[column])
-
-
-                            concatenated_df_orig = concatenated_df_orig.merge(daf_final[['ID','q.type']], on='ID', how='left')
-
-                            concatenated_df_orig['key'] = concatenated_df_orig.apply(key_creator, axis=1)
-
-                            if 'mean' in concatenated_df_orig.columns:
-                                if 'perc' in concatenated_df_orig.columns:
-                                    concatenated_df_orig['perc'] = concatenated_df_orig['perc'].fillna(concatenated_df_orig['mean'])
-                                else:
-                                    concatenated_df_orig['perc'] = concatenated_df_orig['mean']
-
-                            concatenated_df_orig=concatenated_df_orig[['key','perc']]
-
-                            # prepare dashboard inputs 
-                            concatenated_df = pd.concat([tpl[0] for tpl in disaggregations_perc], ignore_index = True)
-                            if 'disaggregations_category_1' in concatenated_df.columns:
-                                concatenated_df = concatenated_df[(concatenated_df['admin'] != 'Total') & (concatenated_df['disaggregations_category_1'] != 'Total')]
-                            else:
-                                concatenated_df = concatenated_df[(concatenated_df['admin'] != 'Total')]
-
-
-                            disagg_columns = [col for col in concatenated_df.columns if col.startswith('disaggregations')]
-                            concatenated_df.loc[:,disagg_columns] = concatenated_df[disagg_columns].fillna(' Overall')
-
-                            # Join tables if needed
-                            print('Joining tables if such was specified')
-                            err_msg_join = ''
-                            disaggregations_perc_new = disaggregations_perc.copy()
-                            # check if any joining is needed
-                            if pd.notna(daf_final['join']).any():
-
-                                # get other children here
-                                child_rows = daf_final[pd.notna(daf_final['join'])]
-
-                                if any(child_rows['ID'].isin(child_rows['join'])):
-                                    err_msg_join+=('Some of the join tables are related to eachother outside of their relationship with the parent row. Please fix this')
-                                else:
-                                    for index, child_row in child_rows.iterrows():
-                                        child_index = child_row['ID']
-                
-                                    if child_index not in daf_final['ID']:
-                                        err_msg_join+=(f'The specified parent index in join column for child row ID = {child_index} doesnt exist in the DAF file')
-                                    else:
-                
-                                        parent_row = daf_final[daf_final['ID'].isin(child_row[['join']])]
-                                        parent_index = parent_row.iloc[0]['ID']
-
-
-                                        # check that the rows are idential
-                                        parent_check = parent_row[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
-                                        child_check = child_row.to_frame().transpose()[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
-
-                                        check_result = child_check.equals(parent_check)
-
-                                        if not check_result:
-                                            err_msg_join+=('Joined rows are not identical in terms of admin, calculations, function and disaggregations')
-                                        else:
-                                            # get the data and dataframe indeces of parents and children
-                                            child_tupple = [(i,tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == child_index]
-                                            parent_tupple = [(i, tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == parent_index]
-
-                                            child_tupple_data = child_tupple[0][1][0].copy()
-                                            child_tupple_index = child_tupple[0][0]
-                                            parent_tupple_data = parent_tupple[0][1][0].copy()
-                                            parent_tupple_index = parent_tupple[0][0]
-                                            # rename the data so that they are readable
-                                            varnames = [parent_tupple_data['variable'][0],child_tupple_data['variable'][0]]
-                                            dataframes =[parent_tupple_data, child_tupple_data]
-
-                                            for var, dataframe in  zip(varnames, dataframes):
-                                                rename_dict = {'mean': 'mean_'+var,'median': 'median_'+var ,'count': 'count_'+var, 
-                                                                'perc': 'perc_'+var,'min': 'min_'+var, 'max': 'max_'+var}
-
-                                                for old_name, new_name in rename_dict.items():
-                                                    if old_name in dataframe.columns:
-                                                        dataframe.rename(columns={old_name: new_name},inplace=True)
-
-
-                                            # get the lists of columns to keep and merge
-                                            columns_to_merge = [item for item in parent_tupple_data.columns if 'disaggregations' in item  or 'admin' in item]+['option']
-                                            columns_to_keep = columns_to_merge+ list(rename_dict.values())
-
-                                            parent_tupple_data= parent_tupple_data.merge(
-                                            child_tupple_data[child_tupple_data.columns.intersection(columns_to_keep)], 
-                                            on = columns_to_merge,how='left')
-
-
-                                            parent_index_f = parent_tupple[0][1][1]
-                                            parent_label_f = str(child_tupple[0][1][2]).split()[0]+' & '+ str(parent_tupple[0][1][2])
-                                            
-                                            if str(child_tupple[0][1][3]) != '':
-                                                parent_sig_f = str(child_tupple[0][1][3])+' & '+ str(parent_tupple[0][1][3])
-                                            else:
-                                                parent_sig_f = ''
-
-                                            new_list = (parent_tupple_data,parent_index_f,parent_label_f,parent_sig_f)
-                                            disaggregations_perc_new[parent_tupple_index] = new_list
-                                            del disaggregations_perc_new[child_tupple_index]
-                            
-                            if err_msg_join !='':
-                                err_msg_join_f = ui.modal(err_msg_join,
-                                                        title= 'Join warning',
-                                                        easy_close=True,
-                                                        footer=False)   
-                                ui.modal_show(err_msg_join_f)
-                            
-                            perc_tbl.set(disaggregations_perc_new)
-                            count_w_tbl.set(disaggregations_count_w)
-                            count_tbl.set(disaggregations_count)
-                            conc_tbl.set(concatenated_df)
-                            conc_key_tbl.set(concatenated_df_orig)
-                            # remove all modal windows
-                            ui.notification_show("Finished processing", duration=5, type="message")
-                            print("--- %s seconds ---" % (time.time() - start_time))
+                        ui.modal_remove()
+                        ui.modal_show(modal_error_fin)
                               
                         
     @render.download()
     def download_data():
         
         disaggregations_perc_new = perc_tbl.get()
+        print(disaggregations_perc_new)
         disaggregations_count_w = count_w_tbl.get()
         disaggregations_count = count_tbl.get()
         concatenated_df = conc_tbl.get()
@@ -675,6 +640,3 @@ def server(input:Inputs, output: Outputs, session:Session):
             ui.modal_show(error_fin)
 
 app = App(app_ui,server, debug=True)
-
-
-app.run()
