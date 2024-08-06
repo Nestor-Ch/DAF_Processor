@@ -17,7 +17,7 @@ import time
 
 app_ui = ui.page_fluid(
     ui.HTML(
-        f'<a style="padding-left:10px;" class="app-title" href= "https://www.reach-initiative.org/" target="_blank"><img src="reach.jpg" height = "50"></a><span class="app-description" style="font-size: 16px; color: #FFFFFF"><strong>Database_uploader</strong></span>'
+        f'<a style="padding-left:10px;" class="app-title" href= "https://www.reach-initiative.org/" target="_blank"><img src="www/reach.jpg" height = "50"></a><span class="app-description" style="font-size: 16px; color: #FFFFFF"><strong>DAF Processor</strong></span>'
     ),
     ui.HTML('<br>'),
     ui.navset_tab(
