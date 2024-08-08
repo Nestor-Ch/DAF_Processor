@@ -478,66 +478,85 @@ def server(input:Inputs, output: Outputs, session:Session):
                                 for index, child_row in child_rows.iterrows():
                                     child_index = child_row['ID']
             
-                                if child_index not in daf_final['ID']:
-                                    raise ValueError(f'The specified parent index in join column for child row ID = {child_index} doesnt exist in the DAF file')
-                                else:
-            
-                                    parent_row = daf_final[daf_final['ID'].isin(child_row[['join']])]
-                                    parent_index = parent_row.iloc[0]['ID']
-
-
-                                    # check that the rows are idential
-                                    parent_check = parent_row[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
-                                    child_check = child_row.to_frame().transpose()[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
-
-                                    check_result = child_check.equals(parent_check)
-
-                                    if not check_result:
-                                        raise ValueError('Joined rows are not identical in terms of admin, calculations, function and disaggregations')
+                                    if child_index not in daf_final['ID'].values:
+                                        raise ValueError(f'The specified parent index in join column for child row ID = {child_index} doesnt exist in the DAF file')
                                     else:
-                                        # get the data and dataframe indeces of parents and children
-                                        child_tupple = [(i,tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == child_index]
-                                        parent_tupple = [(i, tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == parent_index]
-
-                                        child_tupple_data = child_tupple[0][1][0].copy()
-                                        child_tupple_index = child_tupple[0][0]
-                                        parent_tupple_data = parent_tupple[0][1][0].copy()
-                                        parent_tupple_index = parent_tupple[0][0]
-                                        # rename the data so that they are readable
-                                        varnames = [parent_tupple_data['variable'][0],child_tupple_data['variable'][0]]
-                                        dataframes =[parent_tupple_data, child_tupple_data]
-
-                                        for var, dataframe in  zip(varnames, dataframes):
-                                            rename_dict = {'mean': 'mean_'+var,'median': 'median_'+var ,'count': 'count_'+var, 
-                                                            'perc': 'perc_'+var,'min': 'min_'+var, 'max': 'max_'+var}
-
-                                            for old_name, new_name in rename_dict.items():
-                                                if old_name in dataframe.columns:
-                                                    dataframe.rename(columns={old_name: new_name},inplace=True)
+                
+                                        parent_row = daf_final[daf_final['ID'].isin(child_row[['join']])]
+                                        parent_index = parent_row.iloc[0]['ID']
 
 
-                                        # get the lists of columns to keep and merge
-                                        columns_to_merge = [item for item in parent_tupple_data.columns if 'disaggregations' in item  or 'admin' in item]+['option']
-                                        columns_to_keep = columns_to_merge+ list(rename_dict.values())
-
-                                        parent_tupple_data= parent_tupple_data.merge(
-                                        child_tupple_data[child_tupple_data.columns.intersection(columns_to_keep)], 
-                                        on = columns_to_merge,how='left')
-
-
-                                        parent_index_f = parent_tupple[0][1][1]
-                                        parent_label_f = str(child_tupple[0][1][2]).split()[0]+' & '+ str(parent_tupple[0][1][2])
+                                        # check that the rows are idential
+                                        parent_check = parent_row[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
+                                        child_check = child_row.to_frame().transpose()[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
                                         
-                                        if str(child_tupple[0][1][3]) != '':
-                                            parent_sig_f = str(child_tupple[0][1][3])+' & '+ str(parent_tupple[0][1][3])
+                                        parent_check = parent_check.infer_objects(copy=False).fillna(np.nan)
+                                        child_check = child_check.infer_objects(copy=False).fillna(np.nan)
+
+                                        check_result = child_check.equals(parent_check)
+
+                                        if not check_result:
+                                            raise ValueError('Joined rows are not identical in terms of admin, calculations, function and disaggregations')
                                         else:
-                                            parent_sig_f = ''
+                                            # get the data and dataframe indeces of parents and children
+                                            child_tupple = [(i,tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == child_index]
+                                            parent_tupple = [(i, tup) for i, tup in enumerate(disaggregations_perc_new) if tup[1] == parent_index]
 
-                                        new_list = (parent_tupple_data,parent_index_f,parent_label_f,parent_sig_f)
-                                        disaggregations_perc_new[parent_tupple_index] = new_list
-                                        del disaggregations_perc_new[child_tupple_index]
+                                            child_tupple_data = child_tupple[0][1][0].copy()
+                                            child_tupple_index = child_tupple[0][0]
+                                            parent_tupple_data = parent_tupple[0][1][0].copy()
+                                            parent_tupple_index = parent_tupple[0][0]
+                                            
+                                            if parent_tupple_data['variable'][0] == child_tupple_data['variable'][0]:
+                                                var_parent = parent_tupple_data['variable'][0] + '_' +str(parent_tupple_data['ID'][0])
+                                                var_child = child_tupple_data['variable'][0] + '_' + str(child_tupple_data['ID'][0])
+                                                warnings.warn("Some of the rows you're joining have the same variable label. This won't look nice")
+                                            else:
+                                                var_parent = parent_tupple_data['variable'][0] 
+                                                var_child = child_tupple_data['variable'][0] 
+                                                
+                                            
+                                            # rename the data so that they are readable
+                                            varnames = [var_parent,var_child]
+                                            dataframes =[parent_tupple_data, child_tupple_data]
 
-                            
+                                            for var, dataframe in  zip(varnames, dataframes):
+                                                rename_dict = {'mean': 'mean_'+var,'median': 'median_'+var ,'count': 'count_'+var, 
+                                                                'perc': 'perc_'+var,'min': 'min_'+var, 'max': 'max_'+var}
+
+                                                for old_name, new_name in rename_dict.items():
+                                                    if old_name in dataframe.columns:
+                                                        dataframe.rename(columns={old_name: new_name},inplace=True)
+
+
+                                            # get the lists of columns to keep and merge
+                                            columns_to_merge = [item for item in parent_tupple_data.columns if 'disaggregations' in item  or 'admin' in item]
+                                            if 'option' in  parent_tupple_data.columns:
+                                                columns_to_merge=columns_to_merge+['option']
+                                                
+                                            columns_to_keep = columns_to_merge+ list(rename_dict.values())
+
+                                            parent_tupple_data= parent_tupple_data.merge(
+                                            child_tupple_data[child_tupple_data.columns.intersection(columns_to_keep)], 
+                                            on = columns_to_merge,how='left')
+
+
+                                            parent_index_f = parent_tupple[0][1][1]
+                                            
+                                            if  str(child_tupple[0][1][2])==str(parent_tupple[0][1][2]):
+                                                parent_label_f = str(parent_tupple[0][1][2])
+                                            else:
+                                                parent_label_f = str(child_tupple[0][1][2]).split()[0]+' & '+ str(parent_tupple[0][1][2])
+        
+                                            
+                                            if str(child_tupple[0][1][3]) != '':
+                                                parent_sig_f = str(child_tupple[0][1][3])+' & '+ str(parent_tupple[0][1][3])
+                                            else:
+                                                parent_sig_f = ''
+
+                                            new_list = (parent_tupple_data,parent_index_f,parent_label_f,parent_sig_f)
+                                            disaggregations_perc_new[parent_tupple_index] = new_list
+                                            del disaggregations_perc_new[child_tupple_index]
                             
                         perc_tbl.set(disaggregations_perc_new)
                         count_w_tbl.set(disaggregations_count_w)
@@ -562,7 +581,6 @@ def server(input:Inputs, output: Outputs, session:Session):
     def download_data():
         
         disaggregations_perc_new = perc_tbl.get()
-        print(disaggregations_perc_new)
         disaggregations_count_w = count_w_tbl.get()
         disaggregations_count = count_tbl.get()
         concatenated_df = conc_tbl.get()

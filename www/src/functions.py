@@ -378,8 +378,11 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
                 cols_to_keep = [i for i in table.columns if i not in cols_to_drop]
                 pivot_table = table[cols_to_keep]
         else:
-            cols_to_keep = [x for x in table.columns if 'category' in x]+['option']+\
-                [x for x in table.columns if x.startswith(('perc_','median_','mean_','max_','min_'))]+[x for x in table.columns if x.endswith('_count')]
+            cols_to_keep = ([x for x in table.columns if 'category' in x]
+            +(['option']  if 'option' in table.columns else [])
+            +[x for x in table.columns if x.startswith(('perc_','median_','mean_','max_','min_'))]
+            +[x for x in table.columns if x.endswith('_count')])
+            
             pivot_table = table[cols_to_keep]
             
         cell_id = f"A{link_idx}"
@@ -394,7 +397,7 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
 
         for _, row in pivot_table.iterrows():
             row_id = data_sheet.max_row + 1
-            if values_variable == "perc":
+            if values_variable == "perc" :
                 
                 for i, value in enumerate(row):
                     cell = data_sheet.cell(row=row_id, column=i + 1)
@@ -412,17 +415,24 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
                             bottom=Side(style='thin'))
 
                             cell.border = thin_border
-                            
-            elif values_variable == 'mean':
+            elif values_variable == 'mean' or isinstance(values_variable,list):
                 for i, value in enumerate(row):
                     cell = data_sheet.cell(row=row_id, column=i + 1)
                     cell.value = value
-                    if isinstance(value, (float, np.float64, np.float32)) and not pd.isna(value) and pivot_table.columns[i] in ['mean', 'median', 'max' ,'min']:
+
+                    if (isinstance(value, (float, np.float64, np.float32)) and not pd.isna(value)) \
+                        and (pivot_table.columns[i] in ['mean', 'median', 'max' ,'min'] or pivot_table.columns[i].startswith(('perc_','median_','mean_','max_','min_'))):
                         normalized_value = (value - min_col_values[i]) / (max_col_values[i] - min_col_values[i])
+                        
                         color = get_color(normalized_value)
-                        if min_col_values[i] == max_col_values[i]:
-                            color = get_color(1)
-                        cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                        if pivot_table.columns[i].startswith('perc_'):
+                            cell.number_format = '0.00%'
+                            color = get_color(value)
+                            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+                        else:    
+                            if min_col_values[i] == max_col_values[i]:
+                                color = get_color(1)
+                            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
 
                         thin_border = Border(
                             left=Side(style='thick'),
@@ -440,6 +450,8 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
             link_value = ', '.join(values_variable)
         else:
             link_value = values_variable
+        if len(link_value)>30:
+            link_value= link_value[:30]+'...'
             
         text_on_link = label + ' ' + link_value
         link_text = f'=HYPERLINK("#\'Data\'!{cell_id}", "{text_on_link}")'
