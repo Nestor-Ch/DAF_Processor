@@ -405,21 +405,28 @@ def server(input:Inputs, output: Outputs, session:Session):
                         # remove counts prom perc table
                         for element in disaggregations_perc:
                             if isinstance(element[0], pd.DataFrame):  
-                                if all(column in element[0].columns for column in ['category_count','weighted_count']):
-                                    element[0].drop(columns=['category_count','weighted_count','unweighted_count'], inplace=True)
-
+                                columns_to_drop = ['category_count', 'weighted_count', 'unweighted_count']
+                                # Drop each column if it exists in the DataFrame
+                                for column in columns_to_drop:
+                                    if column in element[0].columns:
+                                        element[0].drop(columns=column, inplace=True)
+                                        
                         # remove perc columns from weighted count table
                         for element in disaggregations_count_w:
                             if isinstance(element[0], pd.DataFrame):  
-                                if all(column in element[0].columns for column in ['perc']):
-                                    element[0].drop(columns=['perc','unweighted_count'], inplace=True)
+                                columns_to_drop = ['perc', 'unweighted_count']
+                                for column in columns_to_drop:
+                                    if column in element[0].columns:
+                                        element[0].drop(columns=column, inplace=True)
                                 element[0].rename(columns={'weighted_count': 'category_count'}, inplace=True)
                 
                         # remove perc columns from unweighted count table
                         for element in disaggregations_count:
                             if isinstance(element[0], pd.DataFrame):  
-                                if all(column in element[0].columns for column in ['perc']):
-                                    element[0].drop(columns=['perc','weighted_count'], inplace=True)
+                                columns_to_drop = ['perc', 'weighted_count']
+                                for column in columns_to_drop:
+                                    if column in element[0].columns:
+                                        element[0].drop(columns=column, inplace=True)
                                 element[0].rename(columns={'unweighted_count': 'category_count'}, inplace=True)
 
 
@@ -437,7 +444,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                             if column in concatenated_df_orig.columns:
                                 if column+'_orig' not in concatenated_df_orig.columns:
                                     concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column]
-                                concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column+'_orig'].fillna(concatenated_df_orig[column])
+                                concatenated_df_orig[column+'_orig'] = concatenated_df_orig[column+'_orig'].infer_objects(copy=False).fillna(concatenated_df_orig[column])
 
 
                         concatenated_df_orig = concatenated_df_orig.merge(daf_final[['ID','q.type']], on='ID', how='left')
@@ -463,6 +470,8 @@ def server(input:Inputs, output: Outputs, session:Session):
                         disagg_columns = [col for col in concatenated_df.columns if col.startswith('disaggregations')]
                         concatenated_df.loc[:,disagg_columns] = concatenated_df[disagg_columns].fillna(' Overall')
 
+                        
+                        
                         # Join tables if needed
                         print('Joining tables if such was specified')
                         disaggregations_perc_new = disaggregations_perc.copy()
@@ -489,7 +498,6 @@ def server(input:Inputs, output: Outputs, session:Session):
                                             parent_row = daf_final[daf_final['ID'].isin(child_row[['join']])]
                                             parent_index = parent_row.iloc[0]['ID']
 
-
                                             # check that the rows are idential
                                             parent_check = parent_row[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
                                             child_check = child_row.to_frame().transpose()[['disaggregations','func','calculation','admin','q.type']].reset_index(drop=True)
@@ -514,12 +522,12 @@ def server(input:Inputs, output: Outputs, session:Session):
                                                 if parent_tupple_data['variable'][0] == child_tupple_data['variable'][0]:
                                                     var_parent = parent_tupple_data['variable'][0] + '_' +str(parent_tupple_data['ID'][0])
                                                     var_child = child_tupple_data['variable'][0] + '_' + str(child_tupple_data['ID'][0])
-                                                    warnings.warn("Some of the rows you're joining have the same variable label. This won't look nice")
                                                 else:
                                                     var_parent = parent_tupple_data['variable'][0] 
                                                     var_child = child_tupple_data['variable'][0] 
-                                                    
                                                 
+
+
                                                 # rename the data so that they are readable
                                                 varnames = [var_parent,var_child]
                                                 dataframes =[parent_tupple_data, child_tupple_data]
@@ -547,6 +555,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                                                 on = columns_to_merge,how='left')
 
 
+
                                                 parent_index_f = parent_tupple[0][1][1]
                                                 
                                                 
@@ -561,15 +570,17 @@ def server(input:Inputs, output: Outputs, session:Session):
                                                 new_list = (parent_tupple_data,parent_index_f,parent_label_f,parent_sig_f)
                                                 data_frame[parent_tupple_index] = new_list
                                                 del data_frame[child_tupple_index]
-                        
+
                         
                         disaggregations_perc_new = sorted(disaggregations_perc_new, key=lambda x: x[1])
                         disaggregations_count_w_new = sorted(disaggregations_count_w_new, key=lambda x: x[1])
                         disaggregations_count_new = sorted(disaggregations_count_new, key=lambda x: x[1])
 
+                        # print(disaggregations_count_new[0][0].columns)
+                        
                         perc_tbl.set(disaggregations_perc_new)
-                        count_w_tbl.set(disaggregations_count_w)
-                        count_tbl.set(disaggregations_count)
+                        count_w_tbl.set(disaggregations_count_w_new)
+                        count_tbl.set(disaggregations_count_new)
                         conc_tbl.set(concatenated_df)
                         conc_key_tbl.set(concatenated_df_orig)
                         # remove all modal windows
@@ -667,3 +678,5 @@ def server(input:Inputs, output: Outputs, session:Session):
             ui.modal_show(error_fin)
 
 app = App(app_ui,server, debug=True)
+
+app.run()

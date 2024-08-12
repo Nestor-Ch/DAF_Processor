@@ -122,6 +122,7 @@ def weighted_mean(df, weight_column, numeric_column):
     weighted_max_result = df[numeric_column].max()
     weighted_min_result = df[numeric_column].min()
     count = df.shape[0]
+    count_w = round(total_weight,0)
     
     sorted_df = df.sort_values(by=numeric_column)
     cum_weights = sorted_df[weight_column].cumsum()
@@ -137,7 +138,8 @@ def weighted_mean(df, weight_column, numeric_column):
                       'median':weighted_median_result,
                       'max': weighted_max_result,
                       'min': weighted_min_result,
-                      'count': count})
+                      'unweighted_count': count,
+                      'count': count_w})
 
 
 def get_variable_type(data, variable_name):
@@ -324,8 +326,10 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
             values_variable = "perc"
         elif any([x.startswith(('perc_','median_','mean_','max_','min_','category_count_')) for x in table.columns]):
             values_variable = [x for x in table.columns if x.startswith(('perc_','median_','mean_','max_','min_','category_count_'))]
-        elif 'mean' in table.columns:
+        elif 'mean' in table.columns and 'category_count' not in table.columns:
             values_variable = "mean"
+        elif 'mean' in table.columns and 'category_count'  in table.columns:
+            values_variable = 'count_mean'
         else:
             values_variable = 'category_count'
         if 'disaggregations_category_1' in table.columns:
@@ -362,6 +366,14 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
                     table, pivot_columns + ["admin_category", "full_count"], ["option"], values_variable)
                 pivot_table = pivot_table.sort_values(
                     by='admin_category', key=lambda x: x.map(custom_sort_key))
+        elif values_variable == 'count_mean':
+            table = table.reset_index(drop = True)
+            cols_to_drop = ['ID','variable','admin','disaggregations_1','total_count_perc','min','max','median','mean']
+            cols_to_keep = [i for i in table.columns if i not in cols_to_drop]
+            if make_pivot_with_strata:
+                pivot_table = make_pivot(table, pivot_columns, ["admin_category"], 'category_count')
+            else:
+                pivot_table = table[cols_to_keep]
         elif values_variable == 'mean':
             if make_pivot_with_strata:
                 # add numeric columns as a single one
@@ -381,13 +393,11 @@ def construct_result_table(tables_list, file_name, make_pivot_with_strata=False)
              # check if we're dealing with a count table
             category_count_columns = [x for x in table.columns if x.startswith('category_count_')]
             
-            
             cols_to_keep = ([x for x in table.columns if '_category' in x]
             +(['option']  if 'option' in table.columns else [])
             +(category_count_columns if category_count_columns else
             [x for x in table.columns if x.startswith(('perc_','median_','mean_','max_','min_'))])
             +[x for x in table.columns if x.endswith('_count')])
-            
             pivot_table = table[cols_to_keep]
             
         cell_id = f"A{link_idx}"
@@ -1000,7 +1010,7 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
                 summary_stats['ID'] = daf_final_num.iloc[i]['ID']
                 columns = ['ID', 'admin', 'admin_category', 'variable'] + \
                     disagg_columns + ['mean', 'median','min',
-                                      'max', 'weighted_count', 'full_count','total_count_perc']+og_columns
+                                      'max', 'weighted_count','unweighted_count' ,'full_count','total_count_perc']+og_columns
                 summary_stats = summary_stats[columns]
 
                 df_list.append((summary_stats, daf_final_num['ID'][i], label,res_frame_num))
