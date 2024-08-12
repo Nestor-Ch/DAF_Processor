@@ -678,5 +678,3 @@ def server(input:Inputs, output: Outputs, session:Session):
             ui.modal_show(error_fin)
 
 app = App(app_ui,server, debug=True)
-
-app.run()
