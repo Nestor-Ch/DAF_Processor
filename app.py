@@ -66,6 +66,7 @@ app_ui = ui.page_fluid(
                                             multiple=False
                                             )
                             ),
+                        ui.input_checkbox('checkbox_sign','Would you like to run a significance check on your data?'),
                         ui.input_action_button('process','Process your request'),
                         ui.HTML('<br>'),
                         ui.HTML('<br>'),
@@ -246,6 +247,12 @@ def server(input:Inputs, output: Outputs, session:Session):
     @reactive.effect
     @reactive.event(input.process)
     def process():
+        
+        if input.checkbox_sign():
+            check_signfic = True
+        else:
+            check_signfic = False
+                    
         start_time = time.time()
         if all([input.file_tool, input.file_data, input.file_daf]):
 
@@ -263,7 +270,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                 tool_survey_file.set(load_tool_survey(input.file_tool()[0]['datapath'], label_colname = label_colname.get()[0]))
                 
                 # get the usual names for the inputs
-                
+                print('Read the files')
                 data = data_file.get()
                 sheets = data_sheets.get()
                 
@@ -282,7 +289,8 @@ def server(input:Inputs, output: Outputs, session:Session):
                 
 
                 # pre_process data and test for more errors
-                
+                print('Pre_process the files')
+
                 for sheet_name in sheets:
                     data[sheet_name]['overall'] =' Overall'
                     data[sheet_name]['Overall'] =' Overall'
@@ -387,10 +395,10 @@ def server(input:Inputs, output: Outputs, session:Session):
                         daf_final = daf_merged.merge(tool_survey[['name','q.type']], left_on = 'variable',right_on = 'name', how='left')
                         daf_final['q.type']=daf_final['q.type'].fillna('select_one') 
                         
-                            
+                        print('Building your tables')
                         # analyse the data here
-                        disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= True, weight_column =weighting_column)
-                        
+                        disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= check_signfic, weight_column =weighting_column)
+                        print('building the outputs')
                         disaggregations_orig = deepcopy(disaggregations_full) # analysis key table
 
                         for element in disaggregations_full:
@@ -678,3 +686,4 @@ def server(input:Inputs, output: Outputs, session:Session):
             ui.modal_show(error_fin)
 
 app = App(app_ui,server, debug=True)
+
