@@ -67,13 +67,9 @@ app_ui = ui.page_fluid(
                                             )
                             ),
                         ui.input_checkbox('checkbox_sign','Would you like to run a significance check on your data?'),
-                        ui.input_action_button('process','Process your request'),
+                        ui.download_button("download_data", "Process your request"),
                         ui.HTML('<br>'),
                         ui.HTML('<br>'),
-                        'Download your data once processed',
-                        ui.HTML('<br>'),
-                        ui.HTML('<br>'),
-                        ui.download_button("download_data", "Download the outputs"),
                         width = 1000,
                         open = 'always'
                         )
@@ -244,9 +240,9 @@ def server(input:Inputs, output: Outputs, session:Session):
         weighting_column_input.set(input.weight_column())
 
 
-    @reactive.effect
-    @reactive.event(input.process)
-    def process():
+
+    @render.download()
+    def download_data():
         
         if input.checkbox_sign():
             check_signfic = True
@@ -593,7 +589,79 @@ def server(input:Inputs, output: Outputs, session:Session):
                         conc_key_tbl.set(concatenated_df_orig)
                         # remove all modal windows
                         ui.notification_show("Finished processing", duration=5, type="message")
+                        
+                        # prepare the files for download
+                        
+                        disaggregations_perc_new = perc_tbl.get()
+                        disaggregations_count_w = count_w_tbl.get()
+                        disaggregations_count = count_tbl.get()
+                        concatenated_df = conc_tbl.get()
+                        concatenated_df_orig = conc_key_tbl.get()
+                                                                
+                        weighting_column = weighting_column_input.get()
+                                
+                        if weighting_column =='':
+                            weighting_column=None
+                        
+                        
+                        # write excel files
+                        ui.notification_show("Writing your files", duration=20, type="message")
+                        filename = 'request_file'+'_'+datetime.today().strftime('%Y_%m_%d')
+
+                        filename_dash =filename+'_dashboard.xlsx'
+                        filename_key = filename+'_analysis_key.xlsx'
+                        filename_toc = filename+'_TOC.xlsx'
+                        filename_toc_count = filename+'_TOC_count_unweighted.xlsx'
+                        filename_toc_count_w =filename+'_TOC_count_weighted.xlsx'
+                        filename_wide_toc = filename+'_wide_TOC.xlsx'
+
+                        construct_result_table(disaggregations_perc_new, filename_toc,make_pivot_with_strata = False)
+                        if weighting_column != None:
+                            construct_result_table(disaggregations_count_w, filename_toc_count_w,make_pivot_with_strata = False)
+                        construct_result_table(disaggregations_count, filename_toc_count,make_pivot_with_strata = False)
+                        construct_result_table(disaggregations_perc_new, filename_wide_toc,make_pivot_with_strata = True)
+
+
+                        tables = {
+                            filename_dash: concatenated_df,
+                            filename_key: concatenated_df_orig
+                        }
+                        
+                        tables_for_function ={
+                            filename_toc: disaggregations_perc_new,
+                            filename_toc_count:disaggregations_count,
+                            filename_wide_toc:disaggregations_perc_new
+                        }
+                        
+                        if weighting_column != None:
+                            tables_for_function.update({filename_toc_count_w:disaggregations_count_w})
+
+                        zip_path = 'tables.zip'
+
+                        # Create a ZipFile object
+                        with zipfile.ZipFile(zip_path, 'w') as zipf:
+                            for filename, df in tables.items():
+                                # Use an in-memory bytes buffer
+                                buffer = io.BytesIO()
+                                df.to_excel(buffer, index=False)
+                                # Move to the beginning of the buffer
+                                buffer.seek(0)
+                                # Write buffer to zip file
+                                zipf.writestr(filename, buffer.read())
+                            
+                            for filename_constr, df in tables_for_function.items():
+                                buffer = io.BytesIO()
+                                if 'wide' in filename_constr:
+                                    construct_result_table(df, buffer,make_pivot_with_strata=True)
+                                else:
+                                    construct_result_table(df, buffer,make_pivot_with_strata=False)
+                                buffer.seek(0)
+                                zipf.writestr(filename_constr,buffer.read())
+                                
                         print("--- %s seconds ---" % (time.time() - start_time))
+                        
+                        return zip_path
+
                             
                     except Exception as e:
                         modal_error_fin = ui.modal(str(e),
@@ -603,87 +671,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                         
                         ui.modal_remove()
                         ui.modal_show(modal_error_fin)
+                        
                               
-                        
-    @render.download()
-    def download_data():
-        
-        disaggregations_perc_new = perc_tbl.get()
-        disaggregations_count_w = count_w_tbl.get()
-        disaggregations_count = count_tbl.get()
-        concatenated_df = conc_tbl.get()
-        concatenated_df_orig = conc_key_tbl.get()
-        
-        if not any([item is None for item in [disaggregations_perc_new,disaggregations_count_w,
-                                              disaggregations_count,concatenated_df,concatenated_df_orig]]):
-                        
-            weighting_column = weighting_column_input.get()
-                    
-            if weighting_column =='':
-                weighting_column=None
-            
-            
-            # write excel files
-            ui.notification_show("Writing your files", duration=20, type="message")
-            filename = 'request_file'+'_'+datetime.today().strftime('%Y_%m_%d')
-
-            filename_dash =filename+'_dashboard.xlsx'
-            filename_key = filename+'_analysis_key.xlsx'
-            filename_toc = filename+'_TOC.xlsx'
-            filename_toc_count = filename+'_TOC_count_unweighted.xlsx'
-            filename_toc_count_w =filename+'_TOC_count_weighted.xlsx'
-            filename_wide_toc = filename+'_wide_TOC.xlsx'
-
-            construct_result_table(disaggregations_perc_new, filename_toc,make_pivot_with_strata = False)
-            if weighting_column != None:
-                construct_result_table(disaggregations_count_w, filename_toc_count_w,make_pivot_with_strata = False)
-            construct_result_table(disaggregations_count, filename_toc_count,make_pivot_with_strata = False)
-            construct_result_table(disaggregations_perc_new, filename_wide_toc,make_pivot_with_strata = True)
-
-
-            tables = {
-                filename_dash: concatenated_df,
-                filename_key: concatenated_df_orig
-            }
-            
-            tables_for_function ={
-                filename_toc: disaggregations_perc_new,
-                filename_toc_count:disaggregations_count,
-                filename_wide_toc:disaggregations_perc_new
-            }
-            
-            if weighting_column != None:
-                tables_for_function.update({filename_toc_count_w:disaggregations_count_w})
-
-            zip_path = 'tables.zip'
-
-            # Create a ZipFile object
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for filename, df in tables.items():
-                    # Use an in-memory bytes buffer
-                    buffer = io.BytesIO()
-                    df.to_excel(buffer, index=False)
-                    # Move to the beginning of the buffer
-                    buffer.seek(0)
-                    # Write buffer to zip file
-                    zipf.writestr(filename, buffer.read())
-                
-                for filename_constr, df in tables_for_function.items():
-                    buffer = io.BytesIO()
-                    if 'wide' in filename_constr:
-                        construct_result_table(df, buffer,make_pivot_with_strata=True)
-                    else:
-                        construct_result_table(df, buffer,make_pivot_with_strata=False)
-                    buffer.seek(0)
-                    zipf.writestr(filename_constr,buffer.read())
-                    
-            return zip_path
-        else:
-            error_fin = ui.modal('Could not find the processed data. Please double check if the model has finished analysing the data',
-                     title='Error',
-                     easy_close=True,
-                     footer=False)
-            ui.modal_show(error_fin)
-
+  
 app = App(app_ui,server, debug=True)
-
