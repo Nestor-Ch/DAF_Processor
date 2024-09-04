@@ -293,7 +293,6 @@ def server(input:Inputs, output: Outputs, session:Session):
                                 
                 # add a sheet name to the daf
                 names_data= pd.DataFrame()
-
                 for sheet_name in sheets:
                     # get all the names in your dataframe list
                     variable_names = data[sheet_name].columns
@@ -301,29 +300,31 @@ def server(input:Inputs, output: Outputs, session:Session):
                     dat = {'variable' : variable_names, 'datasheet' :sheet_name}
                     dat = pd.DataFrame(dat)
                     names_data = pd.concat([names_data, dat], ignore_index=True)
+                    
+                names_data = names_data.reset_index(drop=True)
+                # check if we have any duplicates
+                duplicates_frame = names_data.duplicated(subset='variable', keep=False)
+                if duplicates_frame[duplicates_frame==True].shape[0] >0:
+                # get non duplicate entries
+                    names_data_non_dupl = names_data[~duplicates_frame]
+                    deduplicated_frame = pd.DataFrame()
+                    # run a loop for all duplicated names
+                    for i in names_data.loc[duplicates_frame,'variable'].unique():
+                        temp_names =  names_data[names_data['variable']==i]
+                        temp_names = temp_names.reset_index(drop=True)
+                        # if the variable is present in main sheet, keep only that version
+                        if temp_names['datasheet'].isin(['main']).any():
+                            temp_names = temp_names[temp_names['datasheet']=='main']
+                        # else, keep whatever is available on the first row
+                        else:
+                            temp_names = temp_names[:1]
+                        deduplicated_frame=pd.concat([deduplicated_frame, temp_names])
+                    names_data = pd.concat([names_data_non_dupl,deduplicated_frame])
 
-                    names_data = names_data.reset_index(drop=True)
-                    # check if we have any duplicates
-                    duplicates_frame = names_data.duplicated(subset='variable', keep=False)
-                    if duplicates_frame[duplicates_frame==True].shape[0] >0:
-                        # get non duplicate entries
-                        names_data_non_dupl = names_data[~duplicates_frame]
-                        deduplicated_frame = pd.DataFrame()
-                        # run a loop for all duplicated names
-                        for i in names_data.loc[duplicates_frame,'variable'].unique():
-                            temp_names =  names_data[names_data['variable']==i]
-                            temp_names = temp_names.reset_index(drop=True)
-                            # if the variable is present in main sheet, keep only that version
-                            if temp_names['datasheet'].isin(['main']).any():
-                                temp_names = temp_names[temp_names['datasheet']=='main']
-                                # else, keep whatever is available on the first row
-                            else:
-                                temp_names = temp_names[:1]
-                                deduplicated_frame=pd.concat([deduplicated_frame, temp_names])
-                        names_data = pd.concat([names_data_non_dupl,deduplicated_frame])
                 
                 # and now we have our DAF
                 daf_merged = daf.merge(names_data,on='variable', how = 'left')
+                print(daf_merged)
                 
                 if any(daf_merged['datasheet'].isna()):
                     error_message_base = 'Missing the following variables from the dataframe: '+', '.join(daf_merged[daf_merged['datasheet'].isna()]['variable'].unique().astype('str'))
@@ -675,3 +676,5 @@ def server(input:Inputs, output: Outputs, session:Session):
                               
   
 app = App(app_ui,server, debug=True)
+
+
