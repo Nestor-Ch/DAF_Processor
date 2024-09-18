@@ -324,7 +324,6 @@ def server(input:Inputs, output: Outputs, session:Session):
                 
                 # and now we have our DAF
                 daf_merged = daf.merge(names_data,on='variable', how = 'left')
-                print(daf_merged)
                 
                 if any(daf_merged['datasheet'].isna()):
                     error_message_base = 'Missing the following variables from the dataframe: '+', '.join(daf_merged[daf_merged['datasheet'].isna()]['variable'].unique().astype('str'))

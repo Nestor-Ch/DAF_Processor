@@ -630,6 +630,7 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
 
                 # break down the data form SM
                 if daf_final_freq.iloc[i]['q.type'] in ['select_multiple']:
+                    data_temp['ID_column'] = data_temp.index
                     data_temp.loc[:, daf_final_freq.iloc[i]['variable']
                                   ] = data_temp[daf_final_freq.iloc[i]['variable']].str.strip()
 
@@ -638,6 +639,8 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
                     # Separate rows using explode
                     data_temp = data_temp.explode(
                         daf_final_freq.iloc[i]['variable'], ignore_index=True)
+                    data_temp.drop_duplicates(inplace = True)
+                    data_temp.drop('ID_column', axis =1, inplace = True)
 
                 groupby_columns = [daf_final_freq['admin'][i]] + \
                     disaggregations+[daf_final_freq['variable'][i]]
