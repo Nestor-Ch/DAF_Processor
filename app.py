@@ -45,7 +45,10 @@ app_ui = ui.page_fluid(
                      ui.HTML('''
     <h3><b>How to use the app</b></h3>
     <h4>Upload your data, kobo tool, and DAF file into the relevant uploader windows in the <b>Processor</b> tab of the app.
-    If you want to perform weighted analysis, click the checkbox under the question about weights and select the weight variable from your data; if not, do not click the checkbox. After this, click the Process button.
+    If you want to perform weighted analysis, click the checkbox under the question about weights and select the weight variable from your data; if not, do not click the checkbox. 
+    If you want to run a significance check - variance analysis that will check if the variables in the row of your DAF are significantly associated 
+    or add conditional formating to your file - color coding the percentages and numeric statistics to quickly find unusual entries, check the relevant checkboxes.
+    After this, click the Process button.
     The processing should take a few minutes depending on the size of your dataset and DAF. You will get notifications updating you on the progress.
     Once that is done (you will see a notification and the top of the page will stop flashing), you can click download.</h4>
 ''')
@@ -67,6 +70,8 @@ app_ui = ui.page_fluid(
                                             )
                             ),
                         ui.input_checkbox('checkbox_sign','Would you like to run a significance check on your data?'),
+                        ui.input_checkbox('checkbox_form','Would you like to add conditional formatting to your tables?'),
+
                         ui.download_button("download_data", "Process your request"),
                         ui.HTML('<br>'),
                         ui.HTML('<br>'),
@@ -197,6 +202,29 @@ def server(input:Inputs, output: Outputs, session:Session):
                         error_message.set(f'Variable and disaggregation are duplicated, problematic IDs: ' + \
                             problematic_ids_str)
                         
+                if any(daf['variable']==daf['admin']):
+                    problematic_ids_str = ', '.join(str(id) for id in daf.loc[daf['variable'] == daf['admin'], 'ID'])
+                    if error_message.get() != None:
+                        msg = error_message.get()
+                        
+                        error_message.set(msg + ' '+f'Variable and admin are duplicated, problematic IDs: ' + \
+                            problematic_ids_str)
+                    else:
+                        error_message.set(f'Variable and admin are duplicated, problematic IDs: ' + \
+                            problematic_ids_str)
+                        
+                
+                if any(daf['admin']==daf['disaggregations']):
+                    problematic_ids_str = ', '.join(str(id) for id in daf.loc[daf['admin'] == daf['disaggregations'], 'ID'])
+                    if error_message.get() != None:
+                        msg = error_message.get()
+                        
+                        error_message.set(msg + ' '+f'Admin and disaggregation are duplicated, problematic IDs: ' + \
+                            problematic_ids_str)
+                    else:
+                        error_message.set(f'Admin and disaggregation are duplicated, problematic IDs: ' + \
+                            problematic_ids_str)
+                        
                 # check for the functions
                 wrong_functions = set(daf['func'])-{'mean','numeric','select_one','select_multiple','freq'}
                 if len(wrong_functions)>0:
@@ -248,6 +276,11 @@ def server(input:Inputs, output: Outputs, session:Session):
             check_signfic = True
         else:
             check_signfic = False
+            
+        if input.checkbox_form():
+            check_formatting = True
+        else:
+            check_formatting = False
                     
         start_time = time.time()
         if all([input.file_tool, input.file_data, input.file_daf]):
@@ -351,7 +384,13 @@ def server(input:Inputs, output: Outputs, session:Session):
                         #Checking your filter page and building the filter dictionary
                         
                         if filter_daf.shape[0]>0:
-                            check_daf_filter(daf =daf_merged, data = data,filter_daf=filter_daf, tool_survey=tool_survey, tool_choices=tool_choices)
+                            
+                            for col in filter_daf.columns:
+                                if col != 'ID':
+                                    filter_daf[col] = filter_daf[col].str.replace(' ', '')
+                                    filter_daf[col] = filter_daf[col].str.replace("'", '')
+                                    
+                            check_daf_filter(daf =daf_merged, data = data,filter_daf=filter_daf, tool_survey=tool_survey)
                             # Create filter dictionary object 
                             filter_daf_full = filter_daf.merge(daf_merged[['ID','datasheet']], on = 'ID',how = 'left')
 
@@ -614,12 +653,22 @@ def server(input:Inputs, output: Outputs, session:Session):
                         filename_toc_count = filename+'_TOC_count_unweighted.xlsx'
                         filename_toc_count_w =filename+'_TOC_count_weighted.xlsx'
                         filename_wide_toc = filename+'_wide_TOC.xlsx'
-
-                        construct_result_table(disaggregations_perc_new, filename_toc,make_pivot_with_strata = False)
-                        if weighting_column != None:
-                            construct_result_table(disaggregations_count_w, filename_toc_count_w,make_pivot_with_strata = False)
-                        construct_result_table(disaggregations_count, filename_toc_count,make_pivot_with_strata = False)
-                        construct_result_table(disaggregations_perc_new, filename_wide_toc,make_pivot_with_strata = True)
+                        
+                        # print(check_formatting)
+                        # construct_result_table(disaggregations_perc_new, filename_toc,make_pivot_with_strata = False,
+                        #                        color_cells=check_formatting,
+                        #                        conditional_formating=check_formatting)
+                        
+                        # if weighting_column != None:
+                        #     construct_result_table(disaggregations_count_w, filename_toc_count_w,make_pivot_with_strata = False,
+                        #                        color_cells=check_formatting,
+                        #                        conditional_formating=check_formatting)
+                        # construct_result_table(disaggregations_count, filename_toc_count,make_pivot_with_strata = False,
+                        #                        color_cells=check_formatting,
+                        #                        conditional_formating=check_formatting)
+                        # construct_result_table(disaggregations_perc_new, filename_wide_toc,make_pivot_with_strata = True,
+                        #                        color_cells=check_formatting,
+                        #                        conditional_formating=check_formatting)
 
 
                         tables = {
@@ -652,9 +701,13 @@ def server(input:Inputs, output: Outputs, session:Session):
                             for filename_constr, df in tables_for_function.items():
                                 buffer = io.BytesIO()
                                 if 'wide' in filename_constr:
-                                    construct_result_table(df, buffer,make_pivot_with_strata=True)
+                                    construct_result_table(df, buffer,make_pivot_with_strata=True,
+                                                           color_cells=check_formatting,
+                                                           conditional_formating=check_formatting)
                                 else:
-                                    construct_result_table(df, buffer,make_pivot_with_strata=False)
+                                    construct_result_table(df, buffer,make_pivot_with_strata=False,
+                                                           color_cells=check_formatting,
+                                                           conditional_formating=check_formatting)
                                 buffer.seek(0)
                                 zipf.writestr(filename_constr,buffer.read())
                                 
@@ -675,5 +728,3 @@ def server(input:Inputs, output: Outputs, session:Session):
                               
   
 app = App(app_ui,server, debug=True)
-
-
