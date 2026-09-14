@@ -158,23 +158,21 @@ def server(input:Inputs, output: Outputs, session:Session):
         if set(['survey','choices']).issubset(set(sheets_dat)):
             tool_s = pd.read_excel(input.file_tool()[0]['datapath'], sheet_name= 'survey')
             tool_c = pd.read_excel(input.file_tool()[0]['datapath'], sheet_name= 'choices')
-            matcher = re.compile(r'label.*english',re.IGNORECASE)
-            tool_s_label = list(filter(matcher.match,tool_s.columns))
-            tool_c_label = list(filter(matcher.match,tool_c.columns))
-            
+            tool_set = small_data.get('settings')
 
-            if tool_s_label ==tool_c_label:
-                label_colname.set(tool_s_label)
-            else:
-                if err_msg == None :
-                    error_message.set('Error: english label columns do not match in the kobo survey/choices sheets')
+            try:
+                label_col = detect_label_column(tool_s, tool_c, tool_settings=tool_set)
+                label_colname.set([label_col])
+            except ValueError as e:
+                if err_msg is None:
+                    error_message.set(f'Error: {e}')
                 else:
-                    error_message.set(err_msg+' '+'Error: english label columns do not match in the kobo survey/choices sheets')
+                    error_message.set(err_msg+' '+f'Error: {e}')
         else:
             if err_msg is None:
                 error_message.set('Error: missing survey or choices sheet in the kobo tool file')
             else:
-                error_message.set(err_msg+' '+'Error: english label columns do not match in the kobo survey/choices sheets')
+                error_message.set(err_msg+' '+'Error: missing survey or choices sheet in the kobo tool file')
 
     # load the DAF and check if for issues
     @reactive.effect
@@ -250,6 +248,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                                   ', '.join(colnames_daf.difference(daf.columns)))
             
             # Check the filter sheer
+           
             filter_daf = pd.read_excel(input.file_daf()[0]['datapath'], sheet_name="filter")
             colnames_daf_filter = set(['ID','variable','operation','value'])
             if colnames_daf_filter.issubset(set(filter_daf.columns)):
@@ -295,6 +294,8 @@ def server(input:Inputs, output: Outputs, session:Session):
                 ui.notification_show("Processing your data", duration=20, type="message")
                 
                 data_file.set(pd.read_excel(input.file_data()[0]['datapath'],sheet_name=data_sheets.get()))
+                print(label_colname.get())
+                print("----------------------------------------------")
                 tool_choices_file.set(load_tool_choices(input.file_tool()[0]['datapath'], label_colname = label_colname.get()[0]))
                 tool_survey_file.set(load_tool_survey(input.file_tool()[0]['datapath'], label_colname = label_colname.get()[0]))
                 
@@ -387,8 +388,8 @@ def server(input:Inputs, output: Outputs, session:Session):
                             
                             for col in filter_daf.columns:
                                 if col != 'ID':
-                                    filter_daf[col] = filter_daf[col].str.replace(' ', '')
-                                    filter_daf[col] = filter_daf[col].str.replace("'", '')
+                                    filter_daf[col] = filter_daf[col].apply(
+                                        lambda x: x.replace(' ', '').replace("'", '') if isinstance(x, str) else x)
                                     
                             check_daf_filter(daf =daf_merged, data = data,filter_daf=filter_daf, tool_survey=tool_survey)
                             # Create filter dictionary object 
