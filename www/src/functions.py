@@ -142,8 +142,77 @@ def load_tool_survey(filename_tool, label_colname, keep_cols=False):
             tool_survey.loc[i, 'datasheet'] = sheet_name
 
     tool_survey = tool_survey[tool_survey['q.type'].isin(['select_one','select_multiple','integer','decimal'])]
-    
+
     return tool_survey
+
+
+def detect_label_column(tool_survey, tool_choices, tool_settings=None):
+
+    """
+    Determine which label column to use for decoding option/question text,
+    without assuming the tool has an English translation.
+
+    Parameters:
+    ----------
+    tool_survey : pd.DataFrame
+        The raw 'survey' sheet of the Kobo tool (as read directly from Excel,
+        before load_tool_survey's own column filtering, since that filtering
+        itself needs a label column name as an input).
+
+    tool_choices : pd.DataFrame
+        The raw 'choices' sheet of the Kobo tool.
+
+    tool_settings : pd.DataFrame, optional
+        The tool's 'settings' sheet, if present. Used only as a tie-breaker
+        (via its 'default_language' value) when multiple label columns exist
+        in both sheets and none of them is English.
+
+    Returns:
+    -------
+    str
+        The name of the label column to use (e.g. 'label::English' or
+        'label::Ukrainian (uk)' or a bare 'label').
+
+    Raises:
+    ------
+    ValueError
+        If the survey and choices sheets don't share exactly one resolvable
+        label column, even after the English-preference and default_language
+        fallbacks.
+    """
+
+    label_pattern = re.compile(r'^label(::.*)?$', re.IGNORECASE)
+    english_pattern = re.compile(r'label.*english', re.IGNORECASE)
+
+    survey_labels = sorted(col for col in tool_survey.columns if label_pattern.match(str(col)))
+    choices_labels = sorted(col for col in tool_choices.columns if label_pattern.match(str(col)))
+    common_labels = sorted(set(survey_labels) & set(choices_labels))
+
+    if len(common_labels) == 1:
+        return common_labels[0]
+
+    if len(common_labels) == 0:
+        raise ValueError(
+            f"Could not find a matching label column between the survey and choices sheets. "
+            f"Survey has: {survey_labels}. Choices has: {choices_labels}."
+        )
+
+    # More than one label column is common to both sheets - narrow it down.
+    english_common = [col for col in common_labels if english_pattern.match(str(col))]
+    if len(english_common) == 1:
+        return english_common[0]
+
+    if tool_settings is not None and 'default_language' in tool_settings.columns and len(tool_settings) > 0:
+        default_language = tool_settings['default_language'].iloc[0]
+        if isinstance(default_language, str):
+            matching = [col for col in common_labels if default_language.strip().lower() in str(col).lower()]
+            if len(matching) == 1:
+                return matching[0]
+
+    raise ValueError(
+        f"Could not determine which label language to use - tool has multiple label columns: "
+        f"{common_labels}. Please keep only one label language in the survey/choices sheets."
+    )
 
 
 def map_names(column_name, column_values_name, summary_table, tool_survey, tool_choices,label_col, na_include=False):
