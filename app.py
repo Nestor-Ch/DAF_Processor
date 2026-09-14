@@ -48,6 +48,8 @@ app_ui = ui.page_fluid(
     If you want to perform weighted analysis, click the checkbox under the question about weights and select the weight variable from your data; if not, do not click the checkbox. 
     If you want to run a significance check - variance analysis that will check if the variables in the row of your DAF are significantly associated 
     or add conditional formating to your file - color coding the percentages and numeric statistics to quickly find unusual entries, check the relevant checkboxes.
+    The "Select-multiple answer delimiter" field tells the app how multiple selections are joined together within a single select_multiple answer in your data.
+    Standard Kobo/ODK exports join them with a space, which is the default - leave it as-is unless you know your data source uses something else (e.g. a data export that joins selections with "|").
     After this, click the Process button.
     The processing should take a few minutes depending on the size of your dataset and DAF. You will get notifications updating you on the progress.
     Once that is done (you will see a notification and the top of the page will stop flashing), you can click download.</h4>
@@ -71,6 +73,7 @@ app_ui = ui.page_fluid(
                             ),
                         ui.input_checkbox('checkbox_sign','Would you like to run a significance check on your data?'),
                         ui.input_checkbox('checkbox_form','Would you like to add conditional formatting to your tables?'),
+                        ui.input_text('sm_delimiter', 'Select-multiple answer delimiter in your data', value=' '),
 
                         ui.download_button("download_data", "Process your request"),
                         ui.HTML('<br>'),
@@ -316,7 +319,10 @@ def server(input:Inputs, output: Outputs, session:Session):
                 
                 if weighting_column =='':
                     weighting_column=None
-                
+
+                sm_delimiter = input.sm_delimiter()
+                if not sm_delimiter:
+                    sm_delimiter = ' '
 
                 # pre_process data and test for more errors
                 print('Pre_process the files')
@@ -433,7 +439,7 @@ def server(input:Inputs, output: Outputs, session:Session):
                         
                         print('Building your tables')
                         # analyse the data here
-                        disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= check_signfic, weight_column =weighting_column)
+                        disaggregations_full = disaggregation_creator(daf_final, data,filter_dict, tool_choices, tool_survey, label_colname = label_column, check_significance= check_signfic, weight_column =weighting_column, sm_delimiter=sm_delimiter)
                         print('building the outputs')
                         disaggregations_orig = deepcopy(disaggregations_full) # analysis key table
 
