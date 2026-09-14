@@ -11,6 +11,7 @@ from www.src.functions import (
     detect_label_column,
     disaggregation_creator,
 )
+from www.src.daf_generator import build_group_map, generate_daf_rows
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = REPO_ROOT / 'samples'
@@ -146,3 +147,75 @@ def test_library_audit_sample_new_capability():
     # confirms the pipe-delimited combinations were actually split into
     # individual furniture choice codes, not left as combined strings.
     assert {'tables', 'chairs', 'free_shelves', 'storage_shelves', 'librarian_desk'}.issubset(decoded_options)
+
+
+def test_build_group_map_flattens_nested_groups_against_real_tool():
+    tool_path = SAMPLES2 / 'library_audit_kobo_form_current.xlsx'
+    if not tool_path.exists():
+        pytest.skip('samples2/ fixtures not present (untracked sample data, not in version control)')
+
+    label_col, _, _ = _load_tool(tool_path)
+    tool_s_raw = pd.read_excel(tool_path, sheet_name='survey')
+
+    group_map = build_group_map(tool_s_raw, label_colname=label_col)
+
+    assert 'gr7' in group_map
+    assert {'q7_1', 'q7_2', 'q7_5'}.issubset(set(group_map['gr7']['variables']))
+    nested_vars = {'q7_3_reading', 'q7_3_internet', 'q7_3_docs', 'q7_3_teamwork',
+                   'q7_3_homework', 'q7_3_other_activity', 'q7_4_primary', 'q7_4_basic',
+                   'q7_4_senior', 'q7_online_primary', 'q7_online_basic', 'q7_online_senior'}
+    assert nested_vars.issubset(set(group_map['gr7']['variables']))
+    # the nested groups are also independently selectable, each with just its own content
+    assert set(group_map['gr7_3']['variables']) == {'q7_3_reading', 'q7_3_internet', 'q7_3_docs',
+                                                       'q7_3_teamwork', 'q7_3_homework', 'q7_3_other_activity'}
+
+
+def test_build_group_map_excludes_repeat_content_against_real_tool():
+    tool_path = SAMPLES / 'MSNA_2023_Questionnaire_Final_CATI_cleaned.xlsx'
+    if not tool_path.exists():
+        pytest.skip('samples/ fixtures not present (untracked sample data, not in version control)')
+
+    label_col, _, tool_survey = _load_tool(tool_path)
+    tool_s_raw = pd.read_excel(tool_path, sheet_name='survey')
+
+    group_map = build_group_map(tool_s_raw, label_colname=label_col)
+
+    all_grouped_vars = set()
+    for info in group_map.values():
+        all_grouped_vars.update(info['variables'])
+
+    # hh_members / healthcare are real repeat-group sheets in this tool
+    # (68 + 8 eligible questions respectively, confirmed directly against
+    # the tool) - none of their questions should ever appear in any
+    # group's variable list.
+    repeat_vars = set(tool_survey.loc[tool_survey['datasheet'] != 'main', 'name'])
+    assert len(repeat_vars) > 0  # sanity check the fixture actually has repeat content
+    assert repeat_vars.isdisjoint(all_grouped_vars)
+
+
+def test_generate_daf_rows_against_real_tool_survey():
+    tool_path = SAMPLES2 / 'library_audit_kobo_form_current.xlsx'
+    if not tool_path.exists():
+        pytest.skip('samples2/ fixtures not present (untracked sample data, not in version control)')
+
+    label_col, _, tool_survey = _load_tool(tool_path)
+
+    result = generate_daf_rows(
+        dependent_vars=['q1_1', 'q3_1'],
+        admins=['oblast'],
+        disaggregations=['q9_5'],
+        include_overall_admin=True,
+        tool_survey=tool_survey,
+        label_colname=label_col,
+    )
+
+    # 2 variables * 2 admins (Overall + oblast) * (1 + 1 disaggregation) = 8 rows
+    assert len(result) == 8
+    func_by_var = dict(zip(result['variable'], result['func']))
+    assert func_by_var['q1_1'] == 'select_one'
+    assert func_by_var['q3_1'] == 'select_multiple'
+    expected_labels = {
+        tool_survey.loc[tool_survey['name'] == 'q1_1', label_col].iloc[0],
+        tool_survey.loc[tool_survey['name'] == 'q3_1', label_col].iloc[0],
+    }
+    assert expected_labels.issubset(set(result['variable_label']))
