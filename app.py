@@ -7,6 +7,7 @@ import io
 import zipfile
 # Read the functions
 from www.src.functions import *
+from www.src.daf_generator import *
 
 
 from shiny import *
@@ -81,6 +82,35 @@ app_ui = ui.page_fluid(
                         width = 1000,
                         open = 'always'
                         )
+                    )
+                ),
+        ui.nav_panel('Generate DAF',
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        'Upload your Kobo tool',
+                        ui.input_file('gen_file_tool', 'Upload your kobo tool', accept=['.xlsx']),
+                        ui.input_radio_buttons('gen_mode', 'Which questions should be dependent variables?',
+                                        choices={'all': 'All eligible questions', 'blocks': 'Specific blocks', 'questions': 'Specific questions'},
+                                        selected='all'),
+                        ui.panel_conditional(
+                            "input.gen_mode === 'blocks'",
+                            ui.input_selectize('gen_blocks', 'Select blocks', choices=[], multiple=True)
+                            ),
+                        ui.panel_conditional(
+                            "input.gen_mode === 'questions'",
+                            ui.input_selectize('gen_questions', 'Select questions', choices=[], multiple=True)
+                            ),
+                        ui.input_checkbox('gen_include_overall', 'Include Overall admin', value=True),
+                        ui.input_selectize('gen_admins', 'Admin column(s)', choices=[], multiple=True, options={'create': True}),
+                        ui.input_selectize('gen_disaggregations', 'Disaggregation column(s)', choices=[], multiple=True, options={'create': True}),
+                        ui.output_text('gen_row_count'),
+                        ui.download_button('gen_download', 'Download generated DAF'),
+                        ui.HTML('<br>'),
+                        ui.HTML('<br>'),
+                        width = 1000,
+                        open = 'always'
+                        ),
+                    ui.output_data_frame('gen_preview_table')
                     )
                 )
         )
@@ -734,4 +764,111 @@ def server(input:Inputs, output: Outputs, session:Session):
                         
                               
   
+    # ---- Generate DAF tab ----
+
+    gen_tool_survey = reactive.value(None)
+    gen_label_colname = reactive.value(None)
+    gen_group_map = reactive.value({})
+    gen_error_message = reactive.value(None)
+
+    @reactive.effect
+    @reactive.event(input.gen_file_tool)
+    def gen_load_tool():
+        sheets_dat, small_data = get_sheets_small_data(input.gen_file_tool()[0]["datapath"])
+        gen_error_message.set(None)
+        if set(['survey', 'choices']).issubset(set(sheets_dat)):
+            tool_s = pd.read_excel(input.gen_file_tool()[0]['datapath'], sheet_name='survey')
+            tool_c = pd.read_excel(input.gen_file_tool()[0]['datapath'], sheet_name='choices')
+            tool_set = small_data.get('settings')
+            try:
+                label_col = detect_label_column(tool_s, tool_c, tool_settings=tool_set)
+            except ValueError as e:
+                gen_error_message.set(f'Error: {e}')
+                return
+
+            gen_label_colname.set(label_col)
+            tool_survey = load_tool_survey(input.gen_file_tool()[0]['datapath'], label_colname=label_col)
+            gen_tool_survey.set(tool_survey)
+
+            group_map = build_group_map(tool_s, label_colname=label_col)
+            gen_group_map.set(group_map)
+
+            block_choices = {name: info['label'] for name, info in group_map.items()}
+            question_choices = dict(zip(tool_survey['name'], tool_survey[label_col].fillna(tool_survey['name'])))
+            admin_choices = list(tool_survey.loc[tool_survey['q.type'] == 'select_one', 'name'])
+
+            ui.update_selectize('gen_blocks', choices=block_choices)
+            ui.update_selectize('gen_questions', choices=question_choices)
+            ui.update_selectize('gen_admins', choices=admin_choices)
+            ui.update_selectize('gen_disaggregations', choices=admin_choices)
+        else:
+            gen_error_message.set('Error: missing survey or choices sheet in the kobo tool file')
+
+    @reactive.calc
+    def gen_dependent_vars():
+        tool_survey = gen_tool_survey.get()
+        if tool_survey is None:
+            return []
+        if input.gen_mode() == 'all':
+            return list(tool_survey['name'])
+        elif input.gen_mode() == 'blocks':
+            group_map = gen_group_map.get()
+            selected = list(input.gen_blocks())
+            seen = []
+            for block in selected:
+                for var in group_map.get(block, {}).get('variables', []):
+                    if var not in seen:
+                        seen.append(var)
+            return seen
+        else:
+            return list(input.gen_questions())
+
+    @reactive.calc
+    def gen_generated_daf():
+        tool_survey = gen_tool_survey.get()
+        label_col = gen_label_colname.get()
+        if tool_survey is None or label_col is None:
+            return pd.DataFrame(columns=['ID', 'variable', 'variable_label', 'calculation', 'func',
+                                          'admin', 'disaggregations', 'disaggregations_label', 'join'])
+        return generate_daf_rows(
+            dependent_vars=gen_dependent_vars(),
+            admins=list(input.gen_admins()),
+            disaggregations=list(input.gen_disaggregations()),
+            include_overall_admin=input.gen_include_overall(),
+            tool_survey=tool_survey,
+            label_colname=label_col,
+        )
+
+    @render.data_frame
+    def gen_preview_table():
+        return render.DataTable(gen_generated_daf(), width="100%", height="550", filters=False)
+
+    @render.text
+    def gen_row_count():
+        n_rows = gen_generated_daf().shape[0]
+        n_vars = len(gen_dependent_vars())
+        if n_vars == 0:
+            return "No dependent variables selected yet."
+        if n_rows == 0:
+            return f"{n_vars} dependent variable(s) selected, but no admin is selected - nothing to generate. Check 'Include Overall admin' or pick at least one admin."
+        return f"{n_rows} row(s) generated for {n_vars} dependent variable(s)."
+
+    @render.download()
+    def gen_download():
+        if gen_error_message.get() is not None:
+            modal_error = ui.modal(gen_error_message.get(),
+                                   title='Error',
+                                   easy_close=True,
+                                   footer=None)
+            ui.modal_show(modal_error)
+            return
+        main_df = gen_generated_daf()
+        filter_df = pd.DataFrame(columns=['ID', 'variable', 'operation', 'value'])
+        filename = 'generated_DAF_' + datetime.today().strftime('%Y_%m_%d') + '.xlsx'
+        with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+            main_df.to_excel(writer, sheet_name='main', index=False)
+            filter_df.to_excel(writer, sheet_name='filter', index=False)
+        return filename
+
+
 app = App(app_ui,server, debug=True)
