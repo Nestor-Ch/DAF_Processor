@@ -160,6 +160,8 @@ def generate_daf_rows(dependent_vars, admins, disaggregations, include_overall_a
         var_label = _label_for(var)
         func = _func_for(var)
         for admin in effective_admins:
+            if admin == var:
+                continue
             rows.append({
                 'ID': row_id, 'variable': var, 'variable_label': var_label,
                 'calculation': None, 'func': func, 'admin': admin,
@@ -167,6 +169,8 @@ def generate_daf_rows(dependent_vars, admins, disaggregations, include_overall_a
             })
             row_id += 1
             for disagg in disaggregations:
+                if disagg == var or disagg == admin:
+                    continue
                 rows.append({
                     'ID': row_id, 'variable': var, 'variable_label': var_label,
                     'calculation': None, 'func': func, 'admin': admin,

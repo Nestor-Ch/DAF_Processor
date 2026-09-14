@@ -776,6 +776,9 @@ def server(input:Inputs, output: Outputs, session:Session):
     def gen_load_tool():
         sheets_dat, small_data = get_sheets_small_data(input.gen_file_tool()[0]["datapath"])
         gen_error_message.set(None)
+        gen_tool_survey.set(None)
+        gen_label_colname.set(None)
+        gen_group_map.set({})
         if set(['survey', 'choices']).issubset(set(sheets_dat)):
             tool_s = pd.read_excel(input.gen_file_tool()[0]['datapath'], sheet_name='survey')
             tool_c = pd.read_excel(input.gen_file_tool()[0]['datapath'], sheet_name='choices')
@@ -788,6 +791,7 @@ def server(input:Inputs, output: Outputs, session:Session):
 
             gen_label_colname.set(label_col)
             tool_survey = load_tool_survey(input.gen_file_tool()[0]['datapath'], label_colname=label_col)
+            tool_survey = tool_survey[tool_survey['datasheet'] == 'main']
             gen_tool_survey.set(tool_survey)
 
             group_map = build_group_map(tool_s, label_colname=label_col)

@@ -77,6 +77,9 @@ def test_multiple_admins_and_disaggregations_full_cross():
     # 2 admins * (1 + 2 disaggregations) = 6 rows
     assert len(result) == 6
     assert list(result['ID']) == [1, 2, 3, 4, 5, 6]
+    pairs = set(zip(result['admin'], result['disaggregations'].fillna('')))
+    assert pairs == {('Overall', ''), ('Overall', 'q_age'), ('Overall', 'age_group'),
+                      ('oblast', ''), ('oblast', 'q_age'), ('oblast', 'age_group')}
 
 
 def test_func_derivation_by_kobo_type():
@@ -163,3 +166,37 @@ def test_calculation_and_join_always_none():
 
     assert result['calculation'].isna().all()
     assert result['join'].isna().all()
+
+
+def test_self_referential_admin_and_disaggregation_rows_are_skipped():
+    result = generate_daf_rows(
+        dependent_vars=['q_sex'],
+        admins=['q_sex', 'oblast'],
+        disaggregations=['q_sex', 'oblast', 'age_group'],
+        include_overall_admin=False,
+        tool_survey=_tool_survey(),
+        label_colname='label::English',
+    )
+
+    # admin=='q_sex' (the dependent variable) is skipped entirely (0 rows for it).
+    # admin=='oblast' contributes: 1 admin-alone row, plus disaggregations
+    # ['q_sex' skipped (==var), 'oblast' skipped (==admin), 'age_group' kept] = 1 more row.
+    assert len(result) == 2
+    assert set(result['admin']) == {'oblast'}
+    assert set(result['disaggregations'].dropna()) == {'age_group'}
+
+
+def test_default_state_include_overall_with_no_typed_admins():
+    result = generate_daf_rows(
+        dependent_vars=['q_sex'],
+        admins=[],
+        disaggregations=['oblast', 'age_group'],
+        include_overall_admin=True,
+        tool_survey=_tool_survey(),
+        label_colname='label::English',
+    )
+
+    # 1 effective admin (Overall, from the prepend-when-absent branch) *
+    # (1 admin-alone row + 2 disaggregation rows) = 3 rows
+    assert len(result) == 3
+    assert set(result['admin']) == {'Overall'}
