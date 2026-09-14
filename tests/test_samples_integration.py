@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -10,8 +12,9 @@ from www.src.functions import (
     disaggregation_creator,
 )
 
-SAMPLES = 'samples'
-SAMPLES2 = 'samples2'
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SAMPLES = REPO_ROOT / 'samples'
+SAMPLES2 = REPO_ROOT / 'samples2'
 
 
 def _pandas2_compat(df):
@@ -45,9 +48,14 @@ def _build_daf_final(rows, tool_survey):
     return daf
 
 
+@pytest.mark.skipif(
+    not (SAMPLES / 'MSNA_2023_Questionnaire_Final_CATI_cleaned.xlsx').exists()
+    or not (SAMPLES / 'UKR2308_MSNA_clean_data_230829_full.xlsx').exists(),
+    reason='samples/ fixtures not present (untracked sample data, not in version control)',
+)
 def test_msna_sample_end_to_end_regression():
-    tool_path = f'{SAMPLES}/MSNA_2023_Questionnaire_Final_CATI_cleaned.xlsx'
-    data_path = f'{SAMPLES}/UKR2308_MSNA_clean_data_230829_full.xlsx'
+    tool_path = SAMPLES / 'MSNA_2023_Questionnaire_Final_CATI_cleaned.xlsx'
+    data_path = SAMPLES / 'UKR2308_MSNA_clean_data_230829_full.xlsx'
 
     label_col, tool_choices, tool_survey = _load_tool(tool_path)
     assert label_col == 'label::English'
@@ -58,7 +66,9 @@ def test_msna_sample_end_to_end_regression():
         # Same pandas 3.0.x StringDtype gap as _pandas2_compat() above, but on
         # the response data itself: disaggregation_creator writes exploded
         # select_multiple answers (Python lists) back into these columns,
-        # which StringDtype rejects. A no-op under the pinned pandas 2.0.3.
+        # which StringDtype rejects. Under the pinned pandas 2.0.3 this does
+        # convert real int/float columns to object dtype, but harmlessly so
+        # for the select_one/select_multiple columns these two tests use.
         data[sheet_name] = data[sheet_name].astype(object)
         data[sheet_name]['overall'] = ' Overall'
         data[sheet_name]['Overall'] = ' Overall'
@@ -86,11 +96,17 @@ def test_msna_sample_end_to_end_regression():
     # individual, recognizable choice codes - not left as one combined string.
     assert {'damage_to_walls', 'damage_to_floors', 'no_damage_or_noticeable_issue',
             'minor_damage_to_roof_cracks_openings', 'lack_of_space_inside_shelter'}.issubset(decoded_options)
+    assert not any(' ' in str(opt) for opt in decoded_options)
 
 
+@pytest.mark.skipif(
+    not (SAMPLES2 / 'library_audit_kobo_form_current.xlsx').exists()
+    or not (SAMPLES2 / 'Test_frame.xlsx').exists(),
+    reason='samples2/ fixtures not present (untracked sample data, not in version control)',
+)
 def test_library_audit_sample_new_capability():
-    tool_path = f'{SAMPLES2}/library_audit_kobo_form_current.xlsx'
-    data_path = f'{SAMPLES2}/Test_frame.xlsx'
+    tool_path = SAMPLES2 / 'library_audit_kobo_form_current.xlsx'
+    data_path = SAMPLES2 / 'Test_frame.xlsx'
 
     label_col, tool_choices, tool_survey = _load_tool(tool_path)
     assert label_col == 'label::Ukrainian (uk)'
@@ -101,7 +117,9 @@ def test_library_audit_sample_new_capability():
         # Same pandas 3.0.x StringDtype gap as _pandas2_compat() above, but on
         # the response data itself: disaggregation_creator writes exploded
         # select_multiple answers (Python lists) back into these columns,
-        # which StringDtype rejects. A no-op under the pinned pandas 2.0.3.
+        # which StringDtype rejects. Under the pinned pandas 2.0.3 this does
+        # convert real int/float columns to object dtype, but harmlessly so
+        # for the select_one/select_multiple columns these two tests use.
         data[sheet_name] = data[sheet_name].astype(object)
         data[sheet_name]['overall'] = ' Overall'
         data[sheet_name]['Overall'] = ' Overall'

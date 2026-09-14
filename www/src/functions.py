@@ -122,12 +122,12 @@ def load_tool_survey(filename_tool, label_colname, keep_cols=False):
 
     # Select only relevant columns
     if not keep_cols:
-        lang_code = re.split(r'::', label_colname, maxsplit=1)[1]
-        lang_code = re.sub(r'\(', r'\\(', lang_code)
-        lang_code = re.sub(r'\)', r'\\)', lang_code)
-        cols_to_keep = tool_survey.columns[(tool_survey.columns.str.contains(f'((label)|(hint)|(constraint_message)|(required_message))::{lang_code}')) |
-                                           (~tool_survey.columns.str.contains(r'((label)|(hint)|(constraint_message)|(required_message))::'))]
-        tool_survey = tool_survey[cols_to_keep]
+        if '::' in label_colname:
+            lang_code = re.split(r'::', label_colname, maxsplit=1)[1]
+            lang_code = re.escape(lang_code)
+            cols_to_keep = tool_survey.columns[(tool_survey.columns.str.contains(f'((label)|(hint)|(constraint_message)|(required_message))::{lang_code}')) |
+                                               (~tool_survey.columns.str.contains(r'((label)|(hint)|(constraint_message)|(required_message))::'))]
+            tool_survey = tool_survey[cols_to_keep]
 
 
     # Find which data sheet question belongs to
@@ -1265,7 +1265,10 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
                                   ] = data_temp[daf_final_freq.iloc[i]['variable']].str.strip()
                     # split into multiple by the configured delimiter
                     data_temp.loc[:, daf_final_freq.iloc[i]['variable']
-                                  ] = data_temp[daf_final_freq.iloc[i]['variable']].str.split(sm_delimiter).copy()
+                                  ] = data_temp[daf_final_freq.iloc[i]['variable']].str.split(sm_delimiter, regex=False).copy()
+                    # strip whitespace around each token in case the delimiter is padded
+                    data_temp.loc[:, daf_final_freq.iloc[i]['variable']] = data_temp[daf_final_freq.iloc[i]['variable']].apply(
+                        lambda x: [item.strip() for item in x] if isinstance(x, list) else x)
                     # Separate rows using explode
                     data_temp = data_temp.explode(
                         daf_final_freq.iloc[i]['variable'], ignore_index=True)

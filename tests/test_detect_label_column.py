@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from www.src.functions import detect_label_column
+from www.src.functions import detect_label_column, load_tool_survey
 
 
 def _df(columns):
@@ -51,3 +51,30 @@ def test_unresolvable_multiple_languages_raises_value_error():
     # no tool_settings passed, no English column present -> can't pick one
     with pytest.raises(ValueError):
         detect_label_column(survey, choices)
+
+
+def test_load_tool_survey_with_bare_label_column(tmp_path):
+    # A minimal/untranslated XLSForm: bare 'label' column, no '::language'
+    # suffix. detect_label_column() supports and is unit-tested for this
+    # case (see test_bare_label_column_no_language_suffix above), but
+    # load_tool_survey is a separate, pre-existing function that its result
+    # eventually gets passed into - this proves that path doesn't crash.
+    survey_df = pd.DataFrame({
+        'type': ['select_one yes_no', 'text'],
+        'name': ['q1', 'q2'],
+        'label': ['Do you agree?', 'Any comments?'],
+    })
+    choices_df = pd.DataFrame({
+        'list_name': ['yes_no', 'yes_no'],
+        'name': ['yes', 'no'],
+        'label': ['Yes', 'No'],
+    })
+
+    tool_path = tmp_path / 'minimal_tool.xlsx'
+    with pd.ExcelWriter(tool_path) as writer:
+        survey_df.to_excel(writer, sheet_name='survey', index=False)
+        choices_df.to_excel(writer, sheet_name='choices', index=False)
+
+    tool_survey = load_tool_survey(str(tool_path), label_colname='label')
+
+    assert not tool_survey.empty
