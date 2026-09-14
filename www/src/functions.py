@@ -1109,7 +1109,7 @@ def construct_result_table(tables_list, file_name, color_cells=True,make_pivot_w
     workbook.close()
 
 
-def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, tool_survey,label_colname, check_significance, weight_column=None):
+def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, tool_survey,label_colname, check_significance, weight_column=None, sm_delimiter=' '):
 
     """
     Creates disaggregated data tables based on specified configurations and conditions.
@@ -1150,6 +1150,13 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
     weight_column : str, optional
         The name of the column used for weighting responses in the calculations. If not provided, 
         a default weight of 1 will be assigned.
+
+    sm_delimiter : str, optional
+        The delimiter used to join multiple selections within a single
+        select_multiple answer in the uploaded dataframe. Defaults to a
+        single space, matching standard Kobo/ODK exports. Set this to
+        whatever character the data source actually uses (e.g. '|') when
+        it doesn't come from a standard Kobo export.
 
     Returns:
     -------
@@ -1256,9 +1263,9 @@ def disaggregation_creator(daf_final, data, filter_dictionary, tool_choices, too
                     # remove excessive spaces
                     data_temp.loc[:, daf_final_freq.iloc[i]['variable']
                                   ] = data_temp[daf_final_freq.iloc[i]['variable']].str.strip()
-                    # split into multiple  by ' ' delimiter
+                    # split into multiple by the configured delimiter
                     data_temp.loc[:, daf_final_freq.iloc[i]['variable']
-                                  ] = data_temp[daf_final_freq.iloc[i]['variable']].str.split(' ').copy()
+                                  ] = data_temp[daf_final_freq.iloc[i]['variable']].str.split(sm_delimiter).copy()
                     # Separate rows using explode
                     data_temp = data_temp.explode(
                         daf_final_freq.iloc[i]['variable'], ignore_index=True)
