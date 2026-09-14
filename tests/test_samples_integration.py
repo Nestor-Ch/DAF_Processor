@@ -81,10 +81,11 @@ def test_msna_sample_end_to_end_regression():
 
     assert len(result) == 2
     sm_table = [tbl for tbl, id_, *_ in result if id_ == 2][0]
-    # space-delimited MSNA select_multiple answers must still explode into
-    # individual, recognizable choice labels - not one combined string.
-    assert sm_table['option'].nunique() > 1
-    assert not any('  ' in str(opt) for opt in sm_table['option'].dropna())
+    decoded_options = set(sm_table['option_orig'].dropna())
+    # confirms space-delimited combined answers were actually split into
+    # individual, recognizable choice codes - not left as one combined string.
+    assert {'damage_to_walls', 'damage_to_floors', 'no_damage_or_noticeable_issue',
+            'minor_damage_to_roof_cracks_openings', 'lack_of_space_inside_shelter'}.issubset(decoded_options)
 
 
 def test_library_audit_sample_new_capability():
